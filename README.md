@@ -88,3 +88,7 @@ TypeScript               2 repos             ██░░░░░░░░░�
 
  Last Updated on 23/01/2026 18:14:16 UTC
 <!--END_SECTION:waka-->
+
+## 📈 Contribution Graph
+
+![](https://github-readme-activity-graph.vercel.app/graph?username=icloudza&theme=dracula)
