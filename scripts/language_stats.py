@@ -173,17 +173,24 @@ def get_all_repos(username: str, token: str) -> list:
             break
 
         for repo in data:
-            if not repo.get('fork', False):  # 排除 fork
-                repos.append({
-                    'name': repo['name'],
-                    'full_name': repo['full_name'],
-                    'clone_url': repo['clone_url'],
-                    'ssh_url': repo['ssh_url'],
-                    'private': repo.get('private', False),
-                    'default_branch': repo.get('default_branch', 'main')
-                })
-                visibility = "🔒" if repo.get('private') else "🌐"
-                print(f"  {visibility} {repo['name']}")
+            # 排除 fork 和 profile 仓库
+            if repo.get('fork', False):
+                continue
+            if repo['name'].lower() == username.lower():  # 排除与用户名同名的 profile 仓库
+                continue
+            if repo['name'].lower() == 'icloudza':  # 排除 iCloudZA profile 仓库
+                continue
+
+            repos.append({
+                'name': repo['name'],
+                'full_name': repo['full_name'],
+                'clone_url': repo['clone_url'],
+                'ssh_url': repo['ssh_url'],
+                'private': repo.get('private', False),
+                'default_branch': repo.get('default_branch', 'main')
+            })
+            visibility = "🔒" if repo.get('private') else "🌐"
+            print(f"  {visibility} {repo['name']}")
 
         if len(data) < per_page:
             break
