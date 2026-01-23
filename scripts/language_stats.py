@@ -390,7 +390,7 @@ def main():
     # 找出最长的语言名称用于对齐
     max_lang_len = max(len(lang) for lang, _ in sorted_stats[:10]) if sorted_stats else 10
 
-    for rank, (lang, counts) in enumerate(sorted_stats[:10], 1):  # 只显示前10种语言
+    for rank, (lang, counts) in enumerate(sorted_stats[:5], 1):  # 只显示前5种语言
         added = counts['added']
         deleted = counts['deleted']
         total = added + deleted
