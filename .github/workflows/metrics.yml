@@ -24,7 +24,12 @@ jobs:
           base: repositories
           config_timezone: Asia/Shanghai
 
-          # 语言统计插件（带 +/- 行数）
+          # 代码行数统计（+/- 行数）
+          plugin_lines: yes
+          plugin_lines_sections: repositories
+          plugin_lines_repositories_limit: 8
+
+          # 语言统计插件
           plugin_languages: yes
           plugin_languages_indepth: yes
           plugin_languages_details: bytes-size, percentage, lines
