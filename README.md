@@ -38,6 +38,8 @@ TypeScript               2 repos             ██░░░░░░░░░�
 <details>
 <summary>📈 Activity Charts</summary>
 <br>
-<img src="https://raw.githubusercontent.com/icloudza/icloudza/main/assets/bar_graph.png" width="49%">
-<img src="https://github-readme-activity-graph.vercel.app/graph?username=icloudza&theme=github-compact&height=250&hide_border=true" width="49%">
+
+![Timeline](https://raw.githubusercontent.com/icloudza/icloudza/main/assets/bar_graph.png)
+
+![Contribution Graph](https://github-readme-activity-graph.vercel.app/graph?username=icloudza&theme=github-compact&hide_border=true)
 </details>
