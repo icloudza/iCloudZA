@@ -150,7 +150,7 @@ def get_all_repos(username: str, token: str) -> list:
     page = 1
     per_page = 100
 
-    print(f"📦 正在获取仓库列表...")
+    print("Fetching repository list...")
 
     while True:
         # 使用 /user/repos 端点获取包括私有仓库在内的所有仓库
@@ -164,12 +164,12 @@ def get_all_repos(username: str, token: str) -> list:
         try:
             data = json.loads(result.stdout)
         except json.JSONDecodeError:
-            print(f"⚠️ API 响应解析失败: {result.stdout[:200]}", file=sys.stderr)
+            print(f"[WARN] API response parse failed: {result.stdout[:200]}", file=sys.stderr)
             break
 
         if not data or isinstance(data, dict):
             if isinstance(data, dict) and 'message' in data:
-                print(f"⚠️ API 错误: {data['message']}", file=sys.stderr)
+                print(f"[WARN] API error: {data['message']}", file=sys.stderr)
             break
 
         for repo in data:
@@ -189,7 +189,7 @@ def get_all_repos(username: str, token: str) -> list:
                 'private': repo.get('private', False),
                 'default_branch': repo.get('default_branch', 'main')
             })
-            visibility = "🔒" if repo.get('private') else "🌐"
+            visibility = "[Private]" if repo.get('private') else "[Public]"
             print(f"  {visibility} {repo['name']}")
 
         if len(data) < per_page:
@@ -268,9 +268,9 @@ def analyze_repo(repo_path: str, author_emails: list[str], since_days: int = 7) 
                         continue
 
         except subprocess.TimeoutExpired:
-            print(f"    ⚠️ 分析超时", file=sys.stderr)
+            print(f"    [WARN] Analysis timeout", file=sys.stderr)
         except Exception as e:
-            print(f"    ⚠️ 分析错误: {e}", file=sys.stderr)
+            print(f"    [WARN] Analysis error: {e}", file=sys.stderr)
 
     return dict(stats)
 
@@ -308,10 +308,10 @@ def main():
     since_days = int(os.environ.get('SINCE_DAYS', '7'))  # 默认统计最近7天
 
     if not token:
-        print("❌ 错误: 需要设置 GH_TOKEN 环境变量", file=sys.stderr)
+        print("[ERROR] GH_TOKEN environment variable is required", file=sys.stderr)
         sys.exit(1)
 
-    print(f"📊 开始分析 {username} 的仓库（最近 {since_days} 天）...")
+    print(f"Starting analysis for {username} (last {since_days} days)...")
 
     # 获取作者邮箱
     author_emails = get_author_emails(username, token)
@@ -323,15 +323,15 @@ def main():
         if email and email not in author_emails:
             author_emails.append(email)
 
-    print(f"📧 作者邮箱: {author_emails}")
+    print(f"Author emails: {author_emails}")
 
     # 获取仓库列表（包括私有）
     repos = get_all_repos(username, token)
-    print(f"\n📦 共找到 {len(repos)} 个仓库（排除 fork）")
+    print(f"\nFound {len(repos)} repositories (excluding forks)")
 
     private_count = sum(1 for r in repos if r['private'])
     public_count = len(repos) - private_count
-    print(f"   🌐 公开: {public_count}  🔒 私有: {private_count}")
+    print(f"   Public: {public_count}  Private: {private_count}")
 
     # 汇总统计
     total_stats = defaultdict(lambda: {'added': 0, 'deleted': 0})
@@ -339,8 +339,8 @@ def main():
     # 创建临时目录
     with tempfile.TemporaryDirectory() as tmpdir:
         for i, repo in enumerate(repos, 1):
-            visibility = "🔒" if repo['private'] else "🌐"
-            print(f"\n[{i}/{len(repos)}] {visibility} 分析 {repo['name']}...")
+            visibility = "[Private]" if repo['private'] else "[Public]"
+            print(f"\n[{i}/{len(repos)}] {visibility} Analyzing {repo['name']}...")
 
             repo_path = os.path.join(tmpdir, repo['name'])
 
@@ -353,9 +353,9 @@ def main():
                 if repo_stats:
                     repo_total = sum(s['added'] + s['deleted'] for s in repo_stats.values())
                     top_lang = max(repo_stats.items(), key=lambda x: x[1]['added'] + x[1]['deleted'])[0]
-                    print(f"    ✅ {repo_total:,} 行 (主要: {top_lang})")
+                    print(f"    [OK] {repo_total:,} lines (main: {top_lang})")
                 else:
-                    print(f"    ⚪ 本周无提交")
+                    print(f"    [--] No commits this week")
 
                 # 合并统计
                 for lang, counts in repo_stats.items():
@@ -365,16 +365,16 @@ def main():
                 # 清理
                 shutil.rmtree(repo_path, ignore_errors=True)
             else:
-                print(f"    ⚠️ 克隆失败，跳过")
+                print(f"    [WARN] Clone failed, skipping")
 
     # 计算总行数和百分比
     total_lines = sum(s['added'] + s['deleted'] for s in total_stats.values())
 
     if total_lines == 0:
-        print("\n⚠️ 没有找到任何代码统计", file=sys.stderr)
+        print("\n[WARN] No code statistics found", file=sys.stderr)
         sys.exit(1)
 
-    print(f"\n📈 总计: {total_lines:,} 行代码变更")
+    print(f"\nTotal: {total_lines:,} lines changed")
 
     # 排序（按总行数降序）
     sorted_stats = sorted(
@@ -420,7 +420,7 @@ def main():
     with open(output_file, 'w') as f:
         f.write(output)
 
-    print(f"\n✅ 统计结果已保存到 {output_file}")
+    print(f"\n[OK] Results saved to {output_file}")
 
 
 if __name__ == '__main__':
