@@ -107,13 +107,13 @@ def get_language(filepath: str) -> str | None:
 
 
 def format_number(n: int) -> str:
-    """格式化数字，保持更高精度"""
+    """格式化数字，保持高精度"""
     if abs(n) >= 1000000:
-        return f"{n/1000000:.1f}m"
+        return f"{n/1000000:.2f}m"
     elif abs(n) >= 100000:
-        return f"{n/1000:.0f}k"
-    elif abs(n) >= 10000:
         return f"{n/1000:.1f}k"
+    elif abs(n) >= 10000:
+        return f"{n/1000:.2f}k"
     elif abs(n) >= 1000:
         return f"{n/1000:.2f}k"
     else:
@@ -218,16 +218,17 @@ def get_author_emails(username: str, token: str) -> list[str]:
     return emails
 
 
-def analyze_repo(repo_path: str, author_emails: list[str]) -> dict:
-    """分析单个仓库的提交历史，只统计指定作者的提交"""
+def analyze_repo(repo_path: str, author_emails: list[str], since_days: int = 7) -> dict:
+    """分析单个仓库的提交历史，只统计指定作者最近N天的提交"""
     stats = defaultdict(lambda: {'added': 0, 'deleted': 0})
 
     # 对每个作者邮箱分别查询
     for email in author_emails:
-        # 使用 --author 精确匹配作者
+        # 使用 --author 精确匹配作者，--since 限制时间范围
         cmd = [
             'git', '-C', repo_path, 'log',
             f'--author={email}',
+            f'--since={since_days} days ago',
             '--numstat',
             '--format=',
             '--no-merges'  # 排除合并提交
@@ -297,12 +298,13 @@ def main():
     username = os.environ.get('GITHUB_USERNAME', 'icloudza')
     token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
     output_file = os.environ.get('OUTPUT_FILE', 'assets/languages-stats.md')
+    since_days = int(os.environ.get('SINCE_DAYS', '7'))  # 默认统计最近7天
 
     if not token:
         print("❌ 错误: 需要设置 GH_TOKEN 环境变量", file=sys.stderr)
         sys.exit(1)
 
-    print(f"📊 开始分析 {username} 的仓库...")
+    print(f"📊 开始分析 {username} 的仓库（最近 {since_days} 天）...")
 
     # 获取作者邮箱
     author_emails = get_author_emails(username, token)
@@ -337,8 +339,8 @@ def main():
 
             # 克隆仓库
             if clone_repo(repo, repo_path, token):
-                # 分析仓库
-                repo_stats = analyze_repo(repo_path, author_emails)
+                # 分析仓库（只统计最近N天）
+                repo_stats = analyze_repo(repo_path, author_emails, since_days)
 
                 # 显示仓库统计
                 if repo_stats:
@@ -346,7 +348,7 @@ def main():
                     top_lang = max(repo_stats.items(), key=lambda x: x[1]['added'] + x[1]['deleted'])[0]
                     print(f"    ✅ {repo_total:,} 行 (主要: {top_lang})")
                 else:
-                    print(f"    ⚪ 无匹配提交")
+                    print(f"    ⚪ 本周无提交")
 
                 # 合并统计
                 for lang, counts in repo_stats.items():

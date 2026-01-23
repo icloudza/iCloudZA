@@ -2,13 +2,9 @@ name: Language Stats
 
 on:
   schedule:
-    - cron: '0 0 * * 0'  # 每周日运行
+    # 每周日 23:59 中国时间 (UTC+8) = UTC 15:59
+    - cron: '59 15 * * 0'
   workflow_dispatch:  # 手动触发
-  push:
-    branches: [main]
-    paths:
-      - 'scripts/language_stats.py'
-      - '.github/workflows/language-stats.yml'
 
 jobs:
   analyze:
@@ -31,6 +27,7 @@ jobs:
           GITHUB_USERNAME: icloudza
           AUTHOR_EMAILS: icloudza,icloudza@users.noreply.github.com,cloudza
           OUTPUT_FILE: assets/languages-stats.md
+          SINCE_DAYS: '7'  # 统计最近7天
         run: python scripts/language_stats.py
 
       - name: Update README
@@ -54,5 +51,5 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add -A
-          git diff --staged --quiet || git commit -m "chore: 更新语言统计 [skip ci]"
+          git diff --staged --quiet || git commit -m "chore: 更新本周语言统计 [skip ci]"
           git push
