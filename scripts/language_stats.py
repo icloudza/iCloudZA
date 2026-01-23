@@ -383,20 +383,22 @@ def main():
     # 找出最长的语言名称用于对齐
     max_lang_len = max(len(lang) for lang, _ in sorted_stats[:10]) if sorted_stats else 10
 
-    for lang, counts in sorted_stats[:10]:  # 只显示前10种语言
+    for rank, (lang, counts) in enumerate(sorted_stats[:10], 1):  # 只显示前10种语言
         added = counts['added']
         deleted = counts['deleted']
         total = added + deleted
         percentage = (total / total_lines) * 100
 
-        # 格式化输出 - 更精确的对齐
+        # 格式化输出 - 带排名
         lang_padded = lang.ljust(max_lang_len)
         added_str = format_number(added).rjust(7)
         deleted_str = format_number(deleted).rjust(7)
         bar = generate_bar(percentage)
         pct_str = f"{percentage:5.1f}%"
 
-        lines.append(f"{lang_padded} +{added_str}/ -{deleted_str} {bar} {pct_str}")
+        # 排名格式：1. 2. 3. ... 10.
+        rank_str = f"{rank:2d}."
+        lines.append(f"{rank_str} {lang_padded} +{added_str}/ -{deleted_str} {bar} {pct_str}")
 
     lines.append("```")
 
