@@ -2,8 +2,8 @@ name: Waka Readme
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # 每天 UTC 0点运行
-  workflow_dispatch:      # 支持手动触发
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 jobs:
   update-readme:
@@ -23,4 +23,3 @@ jobs:
           SHOW_TIMEZONE: "True"
           SHOW_EDITORS: "True"
           SHOW_SHORT_INFO: "True"
-          LOCALE: "zh_CN"
