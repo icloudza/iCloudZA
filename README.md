@@ -39,7 +39,12 @@ TypeScript               2 repos             ██░░░░░░░░░�
 <summary>📊 Language Stats</summary>
 <br>
 
-![Languages](https://raw.githubusercontent.com/icloudza/iCloudZA/main/assets/languages-terminal.svg)
+<!--LANG_STATS_START-->
+```text
+正在统计中...
+```
+<!--LANG_STATS_END-->
+
 </details>
 
 <details>

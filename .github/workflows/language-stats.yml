@@ -1,0 +1,58 @@
+name: Language Stats
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # 每周日运行
+  workflow_dispatch:  # 手动触发
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/language_stats.py'
+      - '.github/workflows/language-stats.yml'
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run Language Stats Analysis
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GITHUB_USERNAME: icloudza
+          AUTHOR_EMAILS: icloudza,icloudza@users.noreply.github.com,cloudza
+          OUTPUT_FILE: assets/languages-stats.md
+        run: python scripts/language_stats.py
+
+      - name: Update README
+        run: |
+          # 读取统计结果
+          STATS=$(cat assets/languages-stats.md)
+
+          # 使用 sed 替换 README 中的统计部分
+          # 查找 <!--LANG_STATS_START--> 和 <!--LANG_STATS_END--> 之间的内容
+          if grep -q "<!--LANG_STATS_START-->" README.md; then
+            # 使用 awk 替换
+            awk -v stats="$STATS" '
+              /<!--LANG_STATS_START-->/ { print; print stats; skip=1; next }
+              /<!--LANG_STATS_END-->/ { skip=0 }
+              !skip { print }
+            ' README.md > README.tmp && mv README.tmp README.md
+          fi
+
+      - name: Commit and Push
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add -A
+          git diff --staged --quiet || git commit -m "chore: 更新语言统计 [skip ci]"
+          git push
