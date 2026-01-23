@@ -36,6 +36,13 @@ TypeScript               2 repos             ██░░░░░░░░░�
 <!--END_SECTION:waka-->
 
 <details>
+<summary>📊 Language Stats</summary>
+<br>
+
+![Languages](https://raw.githubusercontent.com/icloudza/icloudza/main/assets/languages.svg)
+</details>
+
+<details>
 <summary>📈 Activity Charts</summary>
 <br>
 
