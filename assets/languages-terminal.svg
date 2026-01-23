@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="480" height="128" class="">
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="164" class="">
   
 
   <defs><style>@font-face {
@@ -33,7 +33,9 @@
         </div>
       </div>
 
-<pre><div class="stdin"><span class="ps1-path">icloudza@metrics</span>:<span class="ps1-location">~</span># locale</div><div class="stdout"><b>JAVASCRIPT  </b> [####################] 100.00%
+<pre><div class="stdin"><span class="ps1-path">icloudza@metrics</span>:<span class="ps1-location">~</span># locale</div><div class="stdout"><b>GO          </b> [####################] 96.93%
+<b>JAVASCRIPT  </b> [#                   ] 1.67 %
+<b>TYPESCRIPT  </b> [#                   ] 1.40 %
 </div>
 
 </pre>
