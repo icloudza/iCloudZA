@@ -2,8 +2,8 @@ name: Language Stats
 
 on:
   schedule:
-    # 每周日 23:59 中国时间 (UTC+8) = UTC 15:59
-    - cron: '59 15 * * 0'
+    # 每天 23:59 中国时间 (UTC+8) = UTC 15:59
+    - cron: '59 15 * * *'
   workflow_dispatch:  # 手动触发
 
 jobs:
