@@ -276,12 +276,16 @@ def clone_repo(repo: dict, target_path: str, token: str) -> bool:
         clone_url = clone_url.replace('https://', f'https://{token}@')
 
     clone_cmd = [
-        'git', 'clone', '--quiet', '--depth=0',  # 完整克隆以获取所有历史
+        'git', 'clone', '--quiet',
         clone_url, target_path
     ]
 
     try:
-        result = subprocess.run(clone_cmd, capture_output=True, timeout=300)
+        result = subprocess.run(clone_cmd, capture_output=True, text=True, timeout=600)
+        if result.returncode != 0:
+            # 输出错误信息便于调试
+            if result.stderr:
+                print(f"    Git error: {result.stderr[:100]}", file=sys.stderr)
         return result.returncode == 0
     except subprocess.TimeoutExpired:
         return False
