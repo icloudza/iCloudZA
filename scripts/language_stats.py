@@ -156,7 +156,7 @@ def get_all_repos(username: str, token: str) -> list:
         cmd = [
             'curl', '-s', '-H', f'Authorization: token {token}',
             '-H', 'Accept: application/vnd.github.v3+json',
-            f'https://api.github.com/user/repos?per_page={per_page}&page={page}&affiliation=owner&visibility=all'
+            f'https://api.github.com/user/repos?per_page={per_page}&page={page}&affiliation=owner,collaborator,organization_member&visibility=all'
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
 
