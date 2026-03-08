@@ -1,6 +1,9 @@
 name: Language Stats
 
 on:
+  push:
+    branches:
+      - main
   schedule:
     # 每天 23:59 中国时间 (UTC+8) = UTC 15:59
     - cron: '59 15 * * *'
