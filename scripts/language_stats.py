@@ -11,7 +11,6 @@ import subprocess
 import tempfile
 import shutil
 from collections import defaultdict
-from pathlib import Path
 
 # 文件扩展名到语言的映射
 EXTENSION_MAP = {
