@@ -35,18 +35,38 @@ jobs:
 
       - name: Update README
         run: |
-          # 读取统计结果
+          # 更新本周语言统计
           STATS=$(cat assets/languages-stats.md)
-
-          # 使用 sed 替换 README 中的统计部分
-          # 查找 <!--LANG_STATS_START--> 和 <!--LANG_STATS_END--> 之间的内容
           if grep -q "<!--LANG_STATS_START-->" README.md; then
-            # 使用 awk 替换
             awk -v stats="$STATS" '
               /<!--LANG_STATS_START-->/ { print; print stats; skip=1; next }
               /<!--LANG_STATS_END-->/ { skip=0 }
               !skip { print }
             ' README.md > README.tmp && mv README.tmp README.md
+          fi
+
+          # 更新 commit 时间分布
+          if [ -f assets/commit-stats.md ]; then
+            COMMIT_STATS=$(cat assets/commit-stats.md)
+            if grep -q "<!--COMMIT_STATS_START-->" README.md; then
+              awk -v stats="$COMMIT_STATS" '
+                /<!--COMMIT_STATS_START-->/ { print; print stats; skip=1; next }
+                /<!--COMMIT_STATS_END-->/ { skip=0 }
+                !skip { print }
+              ' README.md > README.tmp && mv README.tmp README.md
+            fi
+          fi
+
+          # 更新语言仓库分布
+          if [ -f assets/repo-lang-stats.md ]; then
+            REPO_LANG=$(cat assets/repo-lang-stats.md)
+            if grep -q "<!--REPO_LANG_START-->" README.md; then
+              awk -v stats="$REPO_LANG" '
+                /<!--REPO_LANG_START-->/ { print; print stats; skip=1; next }
+                /<!--REPO_LANG_END-->/ { skip=0 }
+                !skip { print }
+              ' README.md > README.tmp && mv README.tmp README.md
+            fi
           fi
 
       - name: Commit and Push

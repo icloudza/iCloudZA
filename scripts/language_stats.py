@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 import shutil
 from collections import defaultdict
+from datetime import datetime, timezone, timedelta
 
 # 文件扩展名到语言的映射
 EXTENSION_MAP = {
@@ -71,6 +72,19 @@ EXTENSION_MAP = {
     '.graphql': 'GraphQL',
     '.proto': 'Protocol Buffers',
     '.dockerfile': 'Dockerfile',
+    # 补充语言
+    '.r': 'R',
+    '.scala': 'Scala',
+    '.ex': 'Elixir',
+    '.exs': 'Elixir',
+    '.erl': 'Erlang',
+    '.hs': 'Haskell',
+    '.jl': 'Julia',
+    '.zig': 'Zig',
+    '.tf': 'Terraform',
+    '.hcl': 'HCL',
+    '.pl': 'Perl',
+    '.pm': 'Perl',
 }
 
 # 忽略的文件/目录模式
@@ -81,6 +95,14 @@ IGNORE_PATTERNS = [
     '.min.js', '.min.css', '.map', '.bundle.js',
     '__pycache__/', '.pyc', '.pyo',
     'go.sum',
+    # 自动生成的文件
+    '.generated.', '.gen.', 'generated/',
+    '*.g.dart', '*.freezed.dart',
+    '.pb.go', '_generated.go', 'zz_generated',
+    # 构建产物和缓存
+    'coverage/', '.next/', '.nuxt/', '.output/',
+    '.terraform/', '.terraform.lock.hcl',
+    '*.snap',
 ]
 
 
@@ -186,7 +208,8 @@ def get_all_repos(username: str, token: str) -> list:
                 'clone_url': repo['clone_url'],
                 'ssh_url': repo['ssh_url'],
                 'private': repo.get('private', False),
-                'default_branch': repo.get('default_branch', 'main')
+                'default_branch': repo.get('default_branch', 'main'),
+                'language': repo.get('language'),
             })
             visibility = "[Private]" if repo.get('private') else "[Public]"
             print(f"  {visibility} {repo['name']}")
@@ -228,62 +251,63 @@ def analyze_repo(repo_path: str, author_emails: list[str], since_days: int = 7) 
     """分析单个仓库的提交历史，只统计指定作者最近N天的提交"""
     stats = defaultdict(lambda: {'added': 0, 'deleted': 0})
 
-    # 对每个作者邮箱分别查询
+    # 使用单次 git log，多个 --author 由 git 以 OR 逻辑合并，避免重复计数
+    cmd = [
+        'git', '-C', repo_path, 'log',
+        f'--since={since_days} days ago',
+        '--numstat',
+        '--format=',
+        '--no-merges'
+    ]
     for email in author_emails:
-        # 使用 --author 精确匹配作者，--since 限制时间范围
-        cmd = [
-            'git', '-C', repo_path, 'log',
-            f'--author={email}',
-            f'--since={since_days} days ago',
-            '--numstat',
-            '--format=',
-            '--no-merges'  # 排除合并提交
-        ]
+        cmd.append(f'--author={email}')
 
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-            lines = result.stdout.strip().split('\n')
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        lines = result.stdout.strip().split('\n')
 
-            for line in lines:
-                if not line.strip():
+        for line in lines:
+            if not line.strip():
+                continue
+
+            parts = line.split('\t')
+            if len(parts) != 3:
+                continue
+
+            added, deleted, filepath = parts
+
+            # 跳过二进制文件
+            if added == '-' or deleted == '-':
+                continue
+
+            lang = get_language(filepath)
+            if lang:
+                try:
+                    stats[lang]['added'] += int(added)
+                    stats[lang]['deleted'] += int(deleted)
+                except ValueError:
                     continue
 
-                parts = line.split('\t')
-                if len(parts) != 3:
-                    continue
-
-                added, deleted, filepath = parts
-
-                # 跳过二进制文件
-                if added == '-' or deleted == '-':
-                    continue
-
-                lang = get_language(filepath)
-                if lang:
-                    try:
-                        stats[lang]['added'] += int(added)
-                        stats[lang]['deleted'] += int(deleted)
-                    except ValueError:
-                        continue
-
-        except subprocess.TimeoutExpired:
-            print(f"    [WARN] Analysis timeout", file=sys.stderr)
-        except Exception as e:
-            print(f"    [WARN] Analysis error: {e}", file=sys.stderr)
+    except subprocess.TimeoutExpired:
+        print(f"    [WARN] Analysis timeout", file=sys.stderr)
+    except Exception as e:
+        print(f"    [WARN] Analysis error: {e}", file=sys.stderr)
 
     return dict(stats)
 
 
-def clone_repo(repo: dict, target_path: str, token: str) -> bool:
-    """克隆仓库（支持私有仓库）"""
-    # 使用带 token 的 HTTPS URL
+def clone_repo(repo: dict, target_path: str, token: str, since_days: int = 7) -> bool:
+    """克隆仓库（支持私有仓库，使用浅克隆加速）"""
     clone_url = repo['clone_url']
     if clone_url.startswith('https://'):
-        # 插入 token 进行认证
         clone_url = clone_url.replace('https://', f'https://{token}@')
 
     clone_cmd = [
         'git', 'clone', '--quiet',
+        '--no-checkout',
+        '--no-tags',
+        '--single-branch',
+        f'--shallow-since={since_days + 1} days ago',
         clone_url, target_path
     ]
 
@@ -298,6 +322,110 @@ def clone_repo(repo: dict, target_path: str, token: str) -> bool:
         return False
     except Exception:
         return False
+
+
+def get_commit_time_stats(username: str, token: str, repos: list, utc_offset: int = 8) -> dict:
+    """通过 GitHub API 获取所有仓库中作者的 commit 时间分布"""
+    categories = {'Morning': 0, 'Daytime': 0, 'Evening': 0, 'Night': 0}
+    local_tz = timezone(timedelta(hours=utc_offset))
+
+    for i, repo in enumerate(repos, 1):
+        print(f"  [{i}/{len(repos)}] {repo['name']}...", end=' ', flush=True)
+        page = 1
+        repo_count = 0
+        while page <= 20:  # 每仓库最多 2000 commits
+            cmd = [
+                'curl', '-s', '-H', f'Authorization: token {token}',
+                '-H', 'Accept: application/vnd.github.v3+json',
+                f'https://api.github.com/repos/{repo["full_name"]}/commits?author={username}&per_page=100&page={page}'
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+
+            try:
+                data = json.loads(result.stdout)
+            except json.JSONDecodeError:
+                break
+
+            if not data or isinstance(data, dict):
+                break
+
+            for commit in data:
+                try:
+                    date_str = commit['commit']['author']['date']
+                    dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                    hour = dt.astimezone(local_tz).hour
+                    repo_count += 1
+
+                    if 6 <= hour < 12:
+                        categories['Morning'] += 1
+                    elif 12 <= hour < 18:
+                        categories['Daytime'] += 1
+                    elif 18 <= hour < 24:
+                        categories['Evening'] += 1
+                    else:
+                        categories['Night'] += 1
+                except (KeyError, ValueError):
+                    continue
+
+            if len(data) < 100:
+                break
+            page += 1
+
+        print(f"{repo_count} commits")
+
+    return categories
+
+
+def generate_profile_stats(commit_stats: dict, repos: list) -> tuple:
+    """生成 commit 时间分布和语言仓库分布的 Markdown 文本"""
+    # === Commit 时间分布 ===
+    total_commits = sum(commit_stats.values())
+    commit_lines = []
+    if total_commits > 0:
+        max_cat = max(commit_stats, key=commit_stats.get)
+        title_map = {
+            'Morning': "I'm an Early 🐤",
+            'Daytime': "I'm a Daytime ☀️",
+            'Evening': "I'm an Evening 🌇",
+            'Night': "I'm a Night 🦉",
+        }
+        commit_lines.append(f'**{title_map.get(max_cat, "Commit Stats")}**')
+        commit_lines.append('```text')
+        emojis = {'Morning': '🌞', 'Daytime': '🌆', 'Evening': '🌃', 'Night': '🌙'}
+        for cat in ['Morning', 'Daytime', 'Evening', 'Night']:
+            count = commit_stats[cat]
+            pct = (count / total_commits) * 100
+            bar = generate_bar(pct, 25)
+            commit_lines.append(
+                f"{emojis[cat]} {cat:<20}{count:>5} commits{' ' * 10}{bar} {pct:5.2f} %"
+            )
+        commit_lines.append('```')
+
+    # === 语言仓库分布 ===
+    lang_count = defaultdict(int)
+    for repo in repos:
+        lang = repo.get('language')
+        if lang:
+            lang_count[lang] += 1
+
+    repo_lang_lines = []
+    if lang_count:
+        sorted_langs = sorted(lang_count.items(), key=lambda x: x[1], reverse=True)
+        top_lang = sorted_langs[0][0]
+        total_repos = sum(lang_count.values())
+        max_name_len = max(len(lang) for lang, _ in sorted_langs[:5])
+
+        repo_lang_lines.append(f'**I Mostly Code in {top_lang}**')
+        repo_lang_lines.append('```text')
+        for lang, count in sorted_langs[:5]:
+            pct = (count / total_repos) * 100
+            bar = generate_bar(pct, 25)
+            repo_lang_lines.append(
+                f"{lang:<{max_name_len}}{count:>8} repos{' ' * 13}{bar} {pct:5.2f} %"
+            )
+        repo_lang_lines.append('```')
+
+    return '\n'.join(commit_lines), '\n'.join(repo_lang_lines)
 
 
 def main():
@@ -344,7 +472,7 @@ def main():
             repo_path = os.path.join(tmpdir, repo['name'])
 
             # 克隆仓库
-            if clone_repo(repo, repo_path, token):
+            if clone_repo(repo, repo_path, token, since_days):
                 # 分析仓库（只统计最近N天）
                 repo_stats = analyze_repo(repo_path, author_emails, since_days)
 
@@ -420,6 +548,29 @@ def main():
         f.write(output)
 
     print(f"\n[OK] Results saved to {output_file}")
+
+    # 获取 commit 时间分布（通过 GitHub API，覆盖全部历史）
+    utc_offset = int(os.environ.get('UTC_OFFSET', '8'))
+    print(f"\nAnalyzing commit time distribution (UTC+{utc_offset})...")
+    commit_stats = get_commit_time_stats(username, token, repos, utc_offset)
+    total_commits = sum(commit_stats.values())
+    print(f"Total: {total_commits} commits")
+
+    # 生成 profile 统计
+    commit_output, repo_lang_output = generate_profile_stats(commit_stats, repos)
+
+    # 写入 commit 时间分布
+    stats_dir = os.path.dirname(output_file)
+    commit_file = os.path.join(stats_dir, 'commit-stats.md')
+    with open(commit_file, 'w') as f:
+        f.write(commit_output)
+    print(f"[OK] Commit stats saved to {commit_file}")
+
+    # 写入语言仓库分布
+    repo_lang_file = os.path.join(stats_dir, 'repo-lang-stats.md')
+    with open(repo_lang_file, 'w') as f:
+        f.write(repo_lang_output)
+    print(f"[OK] Repo language stats saved to {repo_lang_file}")
 
 
 if __name__ == '__main__':
