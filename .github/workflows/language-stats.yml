@@ -29,51 +29,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GITHUB_USERNAME: icloudza
           AUTHOR_EMAILS: icloudza,icloudza@users.noreply.github.com,cloudza
-          OUTPUT_FILE: assets/languages-stats.md
+          OUTPUT_DIR: assets
           SINCE_DAYS: '7'      # 本周语言统计窗口
           PROFILE_DAYS: '365'  # 作息画像 / 主要语言窗口
         run: python scripts/language_stats.py
-
-      - name: Update README
-        run: |
-          # 更新本周语言统计
-          STATS=$(cat assets/languages-stats.md)
-          if grep -q "<!--LANG_STATS_START-->" README.md; then
-            awk -v stats="$STATS" '
-              /<!--LANG_STATS_START-->/ { print; print stats; skip=1; next }
-              /<!--LANG_STATS_END-->/ { skip=0 }
-              !skip { print }
-            ' README.md > README.tmp && mv README.tmp README.md
-          fi
-
-          # 更新 commit 时间分布
-          if [ -f assets/commit-stats.md ]; then
-            COMMIT_STATS=$(cat assets/commit-stats.md)
-            if grep -q "<!--COMMIT_STATS_START-->" README.md; then
-              awk -v stats="$COMMIT_STATS" '
-                /<!--COMMIT_STATS_START-->/ { print; print stats; skip=1; next }
-                /<!--COMMIT_STATS_END-->/ { skip=0 }
-                !skip { print }
-              ' README.md > README.tmp && mv README.tmp README.md
-            fi
-          fi
-
-          # 更新语言仓库分布
-          if [ -f assets/repo-lang-stats.md ]; then
-            REPO_LANG=$(cat assets/repo-lang-stats.md)
-            if grep -q "<!--REPO_LANG_START-->" README.md; then
-              awk -v stats="$REPO_LANG" '
-                /<!--REPO_LANG_START-->/ { print; print stats; skip=1; next }
-                /<!--REPO_LANG_END-->/ { skip=0 }
-                !skip { print }
-              ' README.md > README.tmp && mv README.tmp README.md
-            fi
-          fi
 
       - name: Commit and Push
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add -A
-          git diff --staged --quiet || git commit -m "chore: 更新本周语言统计 [skip ci]"
+          git diff --staged --quiet || git commit -m "chore: 更新统计卡片 [skip ci]"
           git push

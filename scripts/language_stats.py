@@ -6,6 +6,7 @@ GitHub 语言统计分析脚本
   2. 作息画像（PROFILE_DAYS，默认 365 天）：按提交时的本地时区统计提交时段
   3. 主要语言（PROFILE_DAYS，默认 365 天）：按语言汇总本人代码行数
 三块共用同一份 PROFILE_DAYS 窗口的浅克隆，不额外调用 commit API。
+结果渲染为带加载动画的 SVG 卡片（见 stats_svg.py），写入 OUTPUT_DIR（默认 assets/）。
 """
 
 import os
@@ -15,7 +16,8 @@ import subprocess
 import tempfile
 import shutil
 from collections import defaultdict
-from datetime import datetime, timezone, timedelta
+
+from stats_svg import render_language_card, render_commit_time_card
 
 # 文件扩展名到语言的映射
 # 只统计主流编程语言和前端语言；数据/配置/文档/构建脚本类文件
@@ -397,132 +399,23 @@ def sort_stats(stats: dict) -> list:
     return sorted(stats.items(), key=lambda x: x[1]['added'] + x[1]['deleted'], reverse=True)
 
 
-def render_lang_block(stats: dict, top_n: int, width: int, empty_text: str) -> list[str]:
-    """渲染语言统计代码块（不含标题），本周和年度两块共用同一格式"""
-    lines = ['```text']
-    sorted_stats = sort_stats(stats)
-    total_lines = sum(s['added'] + s['deleted'] for _, s in sorted_stats)
-
-    if total_lines == 0:
-        lines.append(empty_text)
-        lines.append('```')
-        return lines
-
-    shown = sorted_stats[:top_n]
-    max_lang_len = max(len(lang) for lang, _ in shown)
-
-    for rank, (lang, counts) in enumerate(shown, 1):
-        added = counts['added']
-        deleted = counts['deleted']
-        percentage = (added + deleted) / total_lines * 100
-        lines.append(
-            f"{rank:2d}. {lang.ljust(max_lang_len)} "
-            f"+{format_number(added).rjust(7)}/ -{format_number(deleted).rjust(7)} "
-            f"{generate_bar(percentage, width)} {percentage:5.1f}%"
-        )
-
-    lines.append('```')
-    return lines
+def total_lines(stats: dict) -> int:
+    return sum(s['added'] + s['deleted'] for s in stats.values())
 
 
-# 作息分档（按作者本地时间）
-TIME_CATEGORIES = [
-    ('Morning', 6, 12, '🌞'),
-    ('Daytime', 12, 18, '🌆'),
-    ('Evening', 18, 24, '🌃'),
-    ('Night', 0, 6, '🌙'),
-]
-TIME_TITLES = {
-    'Morning': "I'm an Early 🐤",
-    'Daytime': "I'm a Daytime ☀️",
-    'Evening': "I'm an Evening 🌇",
-    'Night': "I'm a Night 🦉",
-}
-# 最高档领先第二档不足此百分点时，改用“早半天 / 晚半天”合并判定，避免标题频繁跳动
-TITLE_MARGIN = 5.0
-
-
-def pick_time_title(categories: dict, total: int) -> str:
-    """根据分档占比选标题"""
-    ranked = sorted(categories.items(), key=lambda x: x[1], reverse=True)
-    top_name, top_count = ranked[0]
-    second_count = ranked[1][1] if len(ranked) > 1 else 0
-    margin = (top_count - second_count) / total * 100
-
-    if margin >= TITLE_MARGIN:
-        return TIME_TITLES[top_name]
-
-    late = categories['Evening'] + categories['Night']
-    early = categories['Morning'] + categories['Daytime']
-    return TIME_TITLES['Night'] if late >= early else TIME_TITLES['Morning']
-
-
-def peak_window(hours: list[int], span: int = 3) -> tuple[int, int]:
-    """找出提交最集中的连续 span 小时（环形），返回 (起始小时, 结束小时)"""
-    hist = [0] * 24
-    for h in hours:
-        hist[h % 24] += 1
-    best_start, best_sum = 0, -1
-    for start in range(24):
-        total = sum(hist[(start + i) % 24] for i in range(span))
-        if total > best_sum:
-            best_start, best_sum = start, total
-    return best_start, (best_start + span) % 24
-
-
-def generate_profile_stats(hours: list[int], yearly_stats: dict, profile_days: int) -> tuple[str, str]:
-    """生成 commit 时间分布和主要语言两块的 Markdown 文本"""
-    # === Commit 时间分布 ===
-    total_commits = len(hours)
-    commit_lines = []
-    if total_commits > 0:
-        categories = {name: 0 for name, _, _, _ in TIME_CATEGORIES}
-        for h in hours:
-            for name, start, end, _ in TIME_CATEGORIES:
-                if start <= h < end:
-                    categories[name] += 1
-                    break
-
-        commit_lines.append(f'**{pick_time_title(categories, total_commits)}**')
-        commit_lines.append('```text')
-        for name, _, _, emoji in TIME_CATEGORIES:
-            count = categories[name]
-            pct = count / total_commits * 100
-            commit_lines.append(
-                f"{emoji} {name:<20}{count:>5} commits{' ' * 10}{generate_bar(pct, 25)} {pct:5.2f} %"
-            )
-        start, end = peak_window(hours)
-        commit_lines.append('')
-        commit_lines.append(
-            f"⏰ Peak hours: {start:02d}:00 - {end:02d}:00   "
-            f"({total_commits:,} commits in the last {profile_days} days)"
-        )
-        commit_lines.append('```')
-    else:
-        commit_lines.append('**Commit Stats**')
-        commit_lines.append('```text')
-        commit_lines.append(f'No commits in the last {profile_days} days')
-        commit_lines.append('```')
-
-    # === 主要语言（按过去一年本人代码行数） ===
-    sorted_yearly = sort_stats(yearly_stats)
-    repo_lang_lines = []
-    if sorted_yearly and sum(s['added'] + s['deleted'] for _, s in sorted_yearly) > 0:
-        repo_lang_lines.append(f'**I Mostly Code in {sorted_yearly[0][0]}**')
-    else:
-        repo_lang_lines.append('**Language Stats**')
-    repo_lang_lines.extend(render_lang_block(
-        yearly_stats, top_n=5, width=25,
-        empty_text=f'No code changes in the last {profile_days} days',
-    ))
-
-    return '\n'.join(commit_lines), '\n'.join(repo_lang_lines)
+def print_summary(label: str, stats: dict, top_n: int = 5) -> None:
+    """在日志里打印一份简短的语言汇总"""
+    total = total_lines(stats)
+    print(f"\n{label}: {total:,} lines changed")
+    for lang, v in sort_stats(stats)[:top_n]:
+        pct = (v['added'] + v['deleted']) / total * 100 if total else 0
+        print(f"    {lang:<12} +{v['added']:>8,} / -{v['deleted']:>8,}  {pct:5.1f}%")
 
 
 def main():
     username = os.environ.get('GITHUB_USERNAME', 'icloudza')
     token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
-    output_file = os.environ.get('OUTPUT_FILE', 'assets/languages-stats.md')
+    output_dir = os.environ.get('OUTPUT_DIR', 'assets')
     since_days = int(os.environ.get('SINCE_DAYS', '7'))        # 本周统计窗口
     profile_days = int(os.environ.get('PROFILE_DAYS', '365'))  # 作息画像 / 主要语言窗口
 
@@ -552,10 +445,10 @@ def main():
     public_count = len(repos) - private_count
     print(f"   Public: {public_count}  Private: {private_count}")
 
-    # 汇总统计：本周 / 年度 / 提交时间
+    # 汇总统计：本周 / 年度 / 每小时提交数
     weekly_stats = defaultdict(lambda: {'added': 0, 'deleted': 0})
     yearly_stats = defaultdict(lambda: {'added': 0, 'deleted': 0})
-    commit_hours: list[int] = []
+    hours_hist = [0] * 24
 
     # 一份 profile_days 窗口的浅克隆同时服务三块统计
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -573,16 +466,15 @@ def main():
 
                 merge_stats(weekly_stats, week)
                 merge_stats(yearly_stats, year)
-                commit_hours.extend(hours)
+                for h in hours:
+                    hours_hist[h % 24] += 1
 
-                week_total = sum(s['added'] + s['deleted'] for s in week.values())
-                year_total = sum(s['added'] + s['deleted'] for s in year.values())
+                week_total = total_lines(week)
                 if week_total:
-                    top_lang = sort_stats(week)[0][0]
-                    print(f"    [OK] week: {week_total:,} lines (main: {top_lang})")
+                    print(f"    [OK] week: {week_total:,} lines (main: {sort_stats(week)[0][0]})")
                 else:
                     print(f"    [--] No commits this week")
-                print(f"    [..] year: {year_total:,} lines, {len(hours)} commits")
+                print(f"    [..] year: {total_lines(year):,} lines, {len(hours)} commits")
 
                 shutil.rmtree(repo_path, ignore_errors=True)
             elif clone_status == CLONE_NO_COMMITS:
@@ -590,44 +482,32 @@ def main():
             else:
                 print(f"    [WARN] Clone failed, skipping")
 
-    # === 本周语言统计 ===
-    weekly_total = sum(s['added'] + s['deleted'] for s in weekly_stats.values())
-    if weekly_total == 0:
-        print(f"\n[--] No code changes in the last {since_days} days")
-    else:
-        print(f"\nTotal this week: {weekly_total:,} lines changed")
+    # === 日志汇总 ===
+    print_summary(f"This week ({since_days} days)", weekly_stats)
+    print_summary(f"Profile window ({profile_days} days)", yearly_stats)
+    print(f"\nCommits by hour: {hours_hist}")
 
-    output = '\n'.join(render_lang_block(
-        weekly_stats, top_n=5, width=21,
-        empty_text=f'No code changes in the last {since_days} days',
-    ))
-    print("\n" + "=" * 60)
-    print(output)
-    print("=" * 60)
+    # === 渲染 SVG 卡片（浅色 / 深色各一份，README 用 #gh-*-mode-only 切换） ===
+    yearly_sorted = sort_stats(yearly_stats)
+    yearly_title = f"I Mostly Code in {yearly_sorted[0][0]}" if total_lines(yearly_stats) else "Languages"
+    cards = {
+        'weekly-languages': lambda theme: render_language_card(
+            "This Week's Languages", weekly_stats,
+            f"last {since_days} days · lines changed by me", theme=theme),
+        'commit-times': lambda theme: render_commit_time_card(hours_hist, profile_days, theme=theme),
+        'yearly-languages': lambda theme: render_language_card(
+            yearly_title, yearly_stats,
+            f"last {profile_days} days · lines changed by me", theme=theme),
+    }
 
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
-    with open(output_file, 'w') as f:
-        f.write(output)
-    print(f"\n[OK] Results saved to {output_file}")
-
-    # === 作息画像 + 主要语言 ===
-    yearly_total = sum(s['added'] + s['deleted'] for s in yearly_stats.values())
-    print(f"\nProfile window: {len(commit_hours):,} commits, {yearly_total:,} lines changed")
-
-    commit_output, repo_lang_output = generate_profile_stats(commit_hours, yearly_stats, profile_days)
-    print("\n" + commit_output)
-    print(repo_lang_output)
-
-    stats_dir = os.path.dirname(output_file)
-    commit_file = os.path.join(stats_dir, 'commit-stats.md')
-    with open(commit_file, 'w') as f:
-        f.write(commit_output)
-    print(f"\n[OK] Commit stats saved to {commit_file}")
-
-    repo_lang_file = os.path.join(stats_dir, 'repo-lang-stats.md')
-    with open(repo_lang_file, 'w') as f:
-        f.write(repo_lang_output)
-    print(f"[OK] Repo language stats saved to {repo_lang_file}")
+    os.makedirs(output_dir, exist_ok=True)
+    print()
+    for name, render in cards.items():
+        for theme in ('light', 'dark'):
+            path = os.path.join(output_dir, f"{name}-{theme}.svg")
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(render(theme))
+            print(f"[OK] {path}")
 
 
 if __name__ == '__main__':
