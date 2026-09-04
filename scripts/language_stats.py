@@ -211,8 +211,6 @@ def get_all_repos(username: str, token: str) -> list:
                 'default_branch': repo.get('default_branch', 'main'),
                 'language': repo.get('language'),
             })
-            visibility = "[Private]" if repo.get('private') else "[Public]"
-            print(f"  {visibility} {repo['name']}")
 
         if len(data) < per_page:
             break
@@ -351,7 +349,7 @@ def get_commit_time_stats(username: str, token: str, repos: list, utc_offset: in
     local_tz = timezone(timedelta(hours=utc_offset))
 
     for i, repo in enumerate(repos, 1):
-        print(f"  [{i}/{len(repos)}] {repo['name']}...", end=' ', flush=True)
+        print(f"  [{i}/{len(repos)}] repo...", end=' ', flush=True)
         page = 1
         repo_count = 0
         while page <= 20:  # 每仓库最多 2000 commits
@@ -471,7 +469,7 @@ def main():
         if email and email not in author_emails:
             author_emails.append(email)
 
-    print(f"Author emails: {author_emails}")
+    print(f"Author emails: {len(author_emails)} configured")
 
     # 获取仓库列表（包括私有）
     repos = get_all_repos(username, token)
@@ -488,7 +486,7 @@ def main():
     with tempfile.TemporaryDirectory() as tmpdir:
         for i, repo in enumerate(repos, 1):
             visibility = "[Private]" if repo['private'] else "[Public]"
-            print(f"\n[{i}/{len(repos)}] {visibility} Analyzing {repo['name']}...")
+            print(f"\n[{i}/{len(repos)}] {visibility} Analyzing repo...")
 
             repo_path = os.path.join(tmpdir, repo['name'])
 
