@@ -3,10 +3,10 @@
 # Hi there 👋
 
 <p align="left">
-  <img src="assets/weekly-languages-light.svg#gh-light-mode-only" width="495" alt="weekly-languages">
-  <img src="assets/weekly-languages-dark.svg#gh-dark-mode-only" width="495" alt="weekly-languages">
-  <img src="assets/commit-times-light.svg#gh-light-mode-only" width="495" alt="commit-times">
-  <img src="assets/commit-times-dark.svg#gh-dark-mode-only" width="495" alt="commit-times">
-  <img src="assets/yearly-languages-light.svg#gh-light-mode-only" width="495" alt="yearly-languages">
-  <img src="assets/yearly-languages-dark.svg#gh-dark-mode-only" width="495" alt="yearly-languages">
+  <img src="assets/languages-light.svg#gh-light-mode-only" width="830" alt="languages">
+  <img src="assets/languages-dark.svg#gh-dark-mode-only" width="830" alt="languages">
+</p>
+<p align="left">
+  <img src="assets/commit-times-light.svg#gh-light-mode-only" width="830" alt="commit times">
+  <img src="assets/commit-times-dark.svg#gh-dark-mode-only" width="830" alt="commit times">
 </p>

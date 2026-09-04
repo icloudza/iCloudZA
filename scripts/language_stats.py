@@ -17,7 +17,9 @@ import tempfile
 import shutil
 from collections import defaultdict
 
-from stats_svg import render_language_card, render_commit_time_card
+from datetime import datetime
+
+from stats_svg import render_languages_row, render_commit_card
 
 # 文件扩展名到语言的映射
 # 只统计主流编程语言和前端语言；数据/配置/文档/构建脚本类文件
@@ -354,12 +356,13 @@ def clone_repo(repo: dict, target_path: str, token: str, since_days: int = 7) ->
         return CLONE_FAILED
 
 
-def get_commit_hours(repo_path: str, author_emails: list[str], since_days: int) -> list[int]:
-    """从本地克隆中读取指定作者最近 N 天的提交时间（小时），使用提交时记录的本地时区
+def get_commit_times(repo_path: str, author_emails: list[str], since_days: int) -> list[tuple[int, int]]:
+    """从本地克隆中读取指定作者最近 N 天的提交时间，返回 (weekday, hour) 列表
 
     git 的 %aI 会输出带时区偏移的 ISO 时间，例如 2026-09-04T23:12:01+08:00，
-    直接取小时即为作者当时所在时区的本地小时，不需要假设固定时区。
+    直接按字面解析即为作者当时所在时区的本地时间，不需要假设固定时区。
     合并提交的时间是点按钮的时间而非写代码的时间，所以排除。
+    weekday 以周一为 0。
     """
     cmd = [
         'git', '-C', repo_path, 'log',
@@ -370,21 +373,23 @@ def get_commit_hours(repo_path: str, author_emails: list[str], since_days: int) 
     for email in author_emails:
         cmd.append(f'--author={email}')
 
-    hours = []
+    times = []
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         for line in result.stdout.split('\n'):
             line = line.strip()
-            if len(line) >= 13 and line[10] == 'T':
-                try:
-                    hours.append(int(line[11:13]))
-                except ValueError:
-                    continue
+            if len(line) < 19:
+                continue
+            try:
+                dt = datetime.fromisoformat(line)
+                times.append((dt.weekday(), dt.hour))
+            except ValueError:
+                continue
     except subprocess.TimeoutExpired:
         print("    [WARN] Commit time analysis timeout", file=sys.stderr)
     except Exception as e:
         print(f"    [WARN] Commit time analysis error: {e}", file=sys.stderr)
-    return hours
+    return times
 
 
 def merge_stats(total: dict, part: dict) -> None:
@@ -445,10 +450,10 @@ def main():
     public_count = len(repos) - private_count
     print(f"   Public: {public_count}  Private: {private_count}")
 
-    # 汇总统计：本周 / 年度 / 每小时提交数
+    # 汇总统计：本周 / 年度 / 提交时间矩阵 [weekday][hour]
     weekly_stats = defaultdict(lambda: {'added': 0, 'deleted': 0})
     yearly_stats = defaultdict(lambda: {'added': 0, 'deleted': 0})
-    hours_hist = [0] * 24
+    time_matrix = [[0] * 24 for _ in range(7)]
 
     # 一份 profile_days 窗口的浅克隆同时服务三块统计
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -462,19 +467,19 @@ def main():
             if clone_status == CLONE_OK:
                 week = analyze_repo(repo_path, author_emails, since_days)
                 year = analyze_repo(repo_path, author_emails, profile_days)
-                hours = get_commit_hours(repo_path, author_emails, profile_days)
+                times = get_commit_times(repo_path, author_emails, profile_days)
 
                 merge_stats(weekly_stats, week)
                 merge_stats(yearly_stats, year)
-                for h in hours:
-                    hours_hist[h % 24] += 1
+                for weekday, hour in times:
+                    time_matrix[weekday][hour] += 1
 
                 week_total = total_lines(week)
                 if week_total:
                     print(f"    [OK] week: {week_total:,} lines (main: {sort_stats(week)[0][0]})")
                 else:
                     print(f"    [--] No commits this week")
-                print(f"    [..] year: {total_lines(year):,} lines, {len(hours)} commits")
+                print(f"    [..] year: {total_lines(year):,} lines, {len(times)} commits")
 
                 shutil.rmtree(repo_path, ignore_errors=True)
             elif clone_status == CLONE_NO_COMMITS:
@@ -485,19 +490,15 @@ def main():
     # === 日志汇总 ===
     print_summary(f"This week ({since_days} days)", weekly_stats)
     print_summary(f"Profile window ({profile_days} days)", yearly_stats)
+    hours_hist = [sum(time_matrix[d][h] for d in range(7)) for h in range(24)]
     print(f"\nCommits by hour: {hours_hist}")
+    print(f"Commits by weekday: {[sum(row) for row in time_matrix]}")
 
     # === 渲染 SVG 卡片（浅色 / 深色各一份，README 用 #gh-*-mode-only 切换） ===
-    yearly_sorted = sort_stats(yearly_stats)
-    yearly_title = f"I Mostly Code in {yearly_sorted[0][0]}" if total_lines(yearly_stats) else "Languages"
     cards = {
-        'weekly-languages': lambda theme: render_language_card(
-            "This Week's Languages", weekly_stats,
-            f"last {since_days} days · lines changed by me", theme=theme),
-        'commit-times': lambda theme: render_commit_time_card(hours_hist, profile_days, theme=theme),
-        'yearly-languages': lambda theme: render_language_card(
-            yearly_title, yearly_stats,
-            f"last {profile_days} days · lines changed by me", theme=theme),
+        'languages': lambda theme: render_languages_row(
+            weekly_stats, since_days, yearly_stats, profile_days, theme=theme),
+        'commit-times': lambda theme: render_commit_card(time_matrix, profile_days, theme=theme),
     }
 
     os.makedirs(output_dir, exist_ok=True)
