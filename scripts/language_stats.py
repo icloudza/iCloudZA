@@ -296,8 +296,21 @@ def analyze_repo(repo_path: str, author_emails: list[str], since_days: int = 7) 
     return dict(stats)
 
 
-def clone_repo(repo: dict, target_path: str, token: str, since_days: int = 7) -> bool:
-    """克隆仓库（支持私有仓库，使用浅克隆加速）"""
+# clone_repo 的返回状态
+CLONE_OK = 'ok'                  # 克隆成功
+CLONE_NO_COMMITS = 'no_commits'  # 时间窗口内没有任何提交（浅克隆无法进行）
+CLONE_FAILED = 'failed'          # 真正的克隆失败（权限、网络等）
+
+
+def clone_repo(repo: dict, target_path: str, token: str, since_days: int = 7) -> str:
+    """克隆仓库（支持私有仓库，使用浅克隆加速）
+
+    返回 CLONE_OK / CLONE_NO_COMMITS / CLONE_FAILED 之一。
+
+    注意：`--shallow-since` 在时间窗口内没有任何提交时，git 会直接报
+    `fatal: error processing shallow info` 并退出，而不是克隆出一个空仓库。
+    这种情况并非真正的失败，只代表该仓库本周没有提交。
+    """
     clone_url = repo['clone_url']
     if clone_url.startswith('https://'):
         clone_url = clone_url.replace('https://', f'https://{token}@')
@@ -313,15 +326,23 @@ def clone_repo(repo: dict, target_path: str, token: str, since_days: int = 7) ->
 
     try:
         result = subprocess.run(clone_cmd, capture_output=True, text=True, timeout=600)
-        if result.returncode != 0:
-            # 输出错误信息便于调试
-            if result.stderr:
-                print(f"    Git error: {result.stderr[:100]}", file=sys.stderr)
-        return result.returncode == 0
+        if result.returncode == 0:
+            return CLONE_OK
+
+        stderr = result.stderr or ''
+        if 'shallow info' in stderr:
+            return CLONE_NO_COMMITS
+
+        # 输出错误信息便于调试
+        if stderr:
+            print(f"    Git error: {stderr[:100]}", file=sys.stderr)
+        return CLONE_FAILED
     except subprocess.TimeoutExpired:
-        return False
-    except Exception:
-        return False
+        print("    Git error: clone timed out", file=sys.stderr)
+        return CLONE_FAILED
+    except Exception as e:
+        print(f"    Git error: {e}", file=sys.stderr)
+        return CLONE_FAILED
 
 
 def get_commit_time_stats(username: str, token: str, repos: list, utc_offset: int = 8) -> dict:
@@ -472,7 +493,8 @@ def main():
             repo_path = os.path.join(tmpdir, repo['name'])
 
             # 克隆仓库
-            if clone_repo(repo, repo_path, token, since_days):
+            clone_status = clone_repo(repo, repo_path, token, since_days)
+            if clone_status == CLONE_OK:
                 # 分析仓库（只统计最近N天）
                 repo_stats = analyze_repo(repo_path, author_emails, since_days)
 
@@ -491,28 +513,33 @@ def main():
 
                 # 清理
                 shutil.rmtree(repo_path, ignore_errors=True)
+            elif clone_status == CLONE_NO_COMMITS:
+                print(f"    [--] No commits this week")
             else:
                 print(f"    [WARN] Clone failed, skipping")
 
     # 计算总行数和百分比
     total_lines = sum(s['added'] + s['deleted'] for s in total_stats.values())
 
+    # 本周没有任何代码变动不算失败：写出占位统计，后续 commit 分布等仍正常生成
     if total_lines == 0:
-        print("\n[WARN] No code statistics found", file=sys.stderr)
-        sys.exit(1)
-
-    print(f"\nTotal: {total_lines:,} lines changed")
-
-    # 排序（按总行数降序）
-    sorted_stats = sorted(
-        total_stats.items(),
-        key=lambda x: x[1]['added'] + x[1]['deleted'],
-        reverse=True
-    )
+        print(f"\n[--] No code changes in the last {since_days} days")
+        sorted_stats = []
+    else:
+        print(f"\nTotal: {total_lines:,} lines changed")
+        # 排序（按总行数降序）
+        sorted_stats = sorted(
+            total_stats.items(),
+            key=lambda x: x[1]['added'] + x[1]['deleted'],
+            reverse=True
+        )
 
     # 生成输出
     lines = []
     lines.append("```text")
+
+    if not sorted_stats:
+        lines.append(f"No code changes in the last {since_days} days")
 
     # 找出最长的语言名称用于对齐
     max_lang_len = max(len(lang) for lang, _ in sorted_stats[:10]) if sorted_stats else 10
