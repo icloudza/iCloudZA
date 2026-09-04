@@ -14,16 +14,11 @@ from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 
 # 文件扩展名到语言的映射
+# 只统计主流编程语言和前端语言；数据/配置/文档/构建脚本类文件
+# （JSON、YAML、TOML、Markdown、XML、Protocol Buffers、Dockerfile 等）不计入统计
 EXTENSION_MAP = {
-    # 编程语言
-    '.dart': 'Dart',
+    # 通用编程语言
     '.py': 'Python',
-    '.js': 'JavaScript',
-    '.mjs': 'JavaScript',
-    '.cjs': 'JavaScript',
-    '.ts': 'TypeScript',
-    '.tsx': 'TypeScript',
-    '.jsx': 'JavaScript',
     '.go': 'Go',
     '.rs': 'Rust',
     '.java': 'Java',
@@ -40,51 +35,38 @@ EXTENSION_MAP = {
     '.php': 'PHP',
     '.rb': 'Ruby',
     '.lua': 'Lua',
-    '.sh': 'Shell',
-    '.bash': 'Shell',
-    '.zsh': 'Shell',
-    '.ps1': 'PowerShell',
-    '.vue': 'Vue',
-    '.svelte': 'Svelte',
-    # 标记语言
-    '.html': 'HTML',
-    '.htm': 'HTML',
-    '.css': 'CSS',
-    '.scss': 'SCSS',
-    '.sass': 'SASS',
-    '.less': 'Less',
-    '.xml': 'XML',
-    '.svg': 'SVG',
-    # 数据/配置
-    '.json': 'JSON',
-    '.yaml': 'YAML',
-    '.yml': 'YAML',
-    '.toml': 'TOML',
-    '.ini': 'INI',
-    '.conf': 'Config',
-    # 文档
-    '.md': 'Markdown',
-    '.markdown': 'Markdown',
-    '.rst': 'reStructuredText',
-    '.txt': 'Text',
-    # 其他
-    '.sql': 'SQL',
-    '.graphql': 'GraphQL',
-    '.proto': 'Protocol Buffers',
-    '.dockerfile': 'Dockerfile',
-    # 补充语言
-    '.r': 'R',
+    '.dart': 'Dart',
     '.scala': 'Scala',
+    '.r': 'R',
     '.ex': 'Elixir',
     '.exs': 'Elixir',
     '.erl': 'Erlang',
     '.hs': 'Haskell',
     '.jl': 'Julia',
     '.zig': 'Zig',
-    '.tf': 'Terraform',
-    '.hcl': 'HCL',
     '.pl': 'Perl',
     '.pm': 'Perl',
+    '.sql': 'SQL',
+    # 脚本语言
+    '.sh': 'Shell',
+    '.bash': 'Shell',
+    '.zsh': 'Shell',
+    '.ps1': 'PowerShell',
+    # 前端语言
+    '.js': 'JavaScript',
+    '.mjs': 'JavaScript',
+    '.cjs': 'JavaScript',
+    '.jsx': 'JavaScript',
+    '.ts': 'TypeScript',
+    '.tsx': 'TypeScript',
+    '.vue': 'Vue',
+    '.svelte': 'Svelte',
+    '.html': 'HTML',
+    '.htm': 'HTML',
+    '.css': 'CSS',
+    '.scss': 'SCSS',
+    '.sass': 'SASS',
+    '.less': 'Less',
 }
 
 # 忽略的文件/目录模式
@@ -113,16 +95,7 @@ def get_language(filepath: str) -> str | None:
         if pattern in filepath:
             return None
 
-    # 特殊文件名
-    filename = os.path.basename(filepath).lower()
-    if filename == 'dockerfile':
-        return 'Dockerfile'
-    if filename == 'makefile':
-        return 'Makefile'
-    if filename == 'cmakelists.txt':
-        return 'CMake'
-
-    # 按扩展名匹配
+    # 按扩展名匹配（未列入映射表的文件类型不计入统计）
     ext = os.path.splitext(filepath)[1].lower()
     return EXTENSION_MAP.get(ext)
 
