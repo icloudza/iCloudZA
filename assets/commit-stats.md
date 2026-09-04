@@ -1,7 +1,9 @@
 **I'm a Night 🦉**
 ```text
-🌞 Morning               143 commits          ██▉░░░░░░░░░░░░░░░░░░░░░░ 11.58 %
-🌆 Daytime               302 commits          ██████░░░░░░░░░░░░░░░░░░░ 24.45 %
-🌃 Evening               387 commits          ███████▊░░░░░░░░░░░░░░░░░ 31.34 %
-🌙 Night                 403 commits          ████████▏░░░░░░░░░░░░░░░░ 32.63 %
+🌞 Morning                84 commits          ██▋░░░░░░░░░░░░░░░░░░░░░░ 10.69 %
+🌆 Daytime               199 commits          ██████▎░░░░░░░░░░░░░░░░░░ 25.32 %
+🌃 Evening               256 commits          ████████▏░░░░░░░░░░░░░░░░ 32.57 %
+🌙 Night                 247 commits          ███████▊░░░░░░░░░░░░░░░░░ 31.42 %
+
+⏰ Peak hours: 01:00 - 04:00   (786 commits in the last 365 days)
 ```
