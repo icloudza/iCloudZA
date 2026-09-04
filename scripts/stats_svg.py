@@ -74,9 +74,11 @@ def _style(theme: str) -> str:
         "@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}"
         "@keyframes growx{from{transform:scaleX(0)}to{transform:scaleX(1)}}"
         "@keyframes growy{from{transform:scaleY(0)}to{transform:scaleY(1)}}"
-        ".f{opacity:0;animation:fade .5s cubic-bezier(.2,.8,.2,1) forwards}"
-        ".gx{transform:scaleX(0);animation:growx .9s cubic-bezier(.2,.8,.2,1) forwards}"
-        ".gy{transform:scaleY(0);animation:growy .8s cubic-bezier(.2,.8,.2,1) forwards}"
+        # fill-mode 用 both：延迟期间套用起始帧，结束后停在终态；
+        # 静态样式不写 opacity:0 / scale(0)，动画不运行的环境里直接显示终态，不会出现空白卡片
+        ".f{animation:fade .5s cubic-bezier(.2,.8,.2,1) both}"
+        ".gx{animation:growx .9s cubic-bezier(.2,.8,.2,1) both}"
+        ".gy{animation:growy .8s cubic-bezier(.2,.8,.2,1) both}"
     )
     return f"<style>{css}</style>"
 
