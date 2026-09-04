@@ -7,6 +7,6 @@
   <img src="assets/languages-dark.svg#gh-dark-mode-only" width="830" alt="languages">
 </p>
 <p align="left">
-  <img src="assets/commit-times-light.svg#gh-light-mode-only" width="830" alt="commit times">
-  <img src="assets/commit-times-dark.svg#gh-dark-mode-only" width="830" alt="commit times">
+  <img src="assets/coding-activity-light.svg#gh-light-mode-only" width="830" alt="coding activity">
+  <img src="assets/coding-activity-dark.svg#gh-dark-mode-only" width="830" alt="coding activity">
 </p>

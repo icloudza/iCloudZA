@@ -498,7 +498,7 @@ def main():
     cards = {
         'languages': lambda theme: render_languages_row(
             weekly_stats, since_days, yearly_stats, profile_days, theme=theme),
-        'commit-times': lambda theme: render_commit_card(time_matrix, profile_days, theme=theme),
+        'coding-activity': lambda theme: render_commit_card(time_matrix, profile_days, theme=theme),
     }
 
     os.makedirs(output_dir, exist_ok=True)
