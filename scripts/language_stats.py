@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
 GitHub 语言统计分析脚本
-扫描用户所有仓库（包括私有）的提交历史，只统计指定作者的代码行数变化
+扫描用户所有仓库（包括私有）的提交历史，只统计指定作者本人的提交，生成三块统计：
+  1. 本周语言统计（SINCE_DAYS，默认 7 天）：按语言汇总代码行数变化
+  2. 作息画像（PROFILE_DAYS，默认 365 天）：按提交时的本地时区统计提交时段
+  3. 主要语言（PROFILE_DAYS，默认 365 天）：按语言汇总本人代码行数
+三块共用同一份 PROFILE_DAYS 窗口的浅克隆，不额外调用 commit API。
 """
 
 import os
@@ -85,14 +89,18 @@ IGNORE_PATTERNS = [
     'coverage/', '.next/', '.nuxt/', '.output/',
     '.terraform/', '.terraform.lock.hcl',
     '*.snap',
+    # 第三方代码（匹配不区分大小写，所以也覆盖 Vendor/ 之类的写法）
+    'third_party/', 'third-party/', 'thirdparty/',
+    '.xcframework/', 'pods/', 'carthage/', 'checkouts/',
 ]
 
 
 def get_language(filepath: str) -> str | None:
     """根据文件路径获取语言"""
-    # 检查是否应该忽略
+    # 检查是否应该忽略（不区分大小写）
+    lowered = filepath.lower()
     for pattern in IGNORE_PATTERNS:
-        if pattern in filepath:
+        if pattern in lowered:
             return None
 
     # 按扩展名匹配（未列入映射表的文件类型不计入统计）
@@ -174,6 +182,8 @@ def get_all_repos(username: str, token: str) -> list:
                 continue
             if repo['name'].lower() == 'icloudza':  # 排除 iCloudZA profile 仓库
                 continue
+            if repo.get('archived', False):  # 排除已归档仓库
+                continue
 
             repos.append({
                 'name': repo['name'],
@@ -182,7 +192,6 @@ def get_all_repos(username: str, token: str) -> list:
                 'ssh_url': repo['ssh_url'],
                 'private': repo.get('private', False),
                 'default_branch': repo.get('default_branch', 'main'),
-                'language': repo.get('language'),
             })
 
         if len(data) < per_page:
@@ -280,7 +289,7 @@ def clone_repo(repo: dict, target_path: str, token: str, since_days: int = 7) ->
 
     注意：`--shallow-since` 在时间窗口内没有任何提交时，git 会直接报
     `fatal: error processing shallow info` 并退出，而不是克隆出一个空仓库。
-    这种情况并非真正的失败，只代表该仓库本周没有提交。
+    这种情况并非真正的失败，只代表该仓库在时间窗口内没有提交。
     """
     clone_url = repo['clone_url']
     if clone_url.startswith('https://'):
@@ -316,106 +325,169 @@ def clone_repo(repo: dict, target_path: str, token: str, since_days: int = 7) ->
         return CLONE_FAILED
 
 
-def get_commit_time_stats(username: str, token: str, repos: list, utc_offset: int = 8) -> dict:
-    """通过 GitHub API 获取所有仓库中作者的 commit 时间分布"""
-    categories = {'Morning': 0, 'Daytime': 0, 'Evening': 0, 'Night': 0}
-    local_tz = timezone(timedelta(hours=utc_offset))
+def get_commit_hours(repo_path: str, author_emails: list[str], since_days: int) -> list[int]:
+    """从本地克隆中读取指定作者最近 N 天的提交时间（小时），使用提交时记录的本地时区
 
-    for i, repo in enumerate(repos, 1):
-        print(f"  [{i}/{len(repos)}] repo...", end=' ', flush=True)
-        page = 1
-        repo_count = 0
-        while page <= 20:  # 每仓库最多 2000 commits
-            cmd = [
-                'curl', '-s', '-H', f'Authorization: token {token}',
-                '-H', 'Accept: application/vnd.github.v3+json',
-                f'https://api.github.com/repos/{repo["full_name"]}/commits?author={username}&per_page=100&page={page}'
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True)
+    git 的 %aI 会输出带时区偏移的 ISO 时间，例如 2026-09-04T23:12:01+08:00，
+    直接取小时即为作者当时所在时区的本地小时，不需要假设固定时区。
+    合并提交的时间是点按钮的时间而非写代码的时间，所以排除。
+    """
+    cmd = [
+        'git', '-C', repo_path, 'log',
+        f'--since={since_days} days ago',
+        '--no-merges',
+        '--format=%aI',
+    ]
+    for email in author_emails:
+        cmd.append(f'--author={email}')
 
-            try:
-                data = json.loads(result.stdout)
-            except json.JSONDecodeError:
-                break
-
-            if not data or isinstance(data, dict):
-                break
-
-            for commit in data:
+    hours = []
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        for line in result.stdout.split('\n'):
+            line = line.strip()
+            if len(line) >= 13 and line[10] == 'T':
                 try:
-                    date_str = commit['commit']['author']['date']
-                    dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-                    hour = dt.astimezone(local_tz).hour
-                    repo_count += 1
-
-                    if 6 <= hour < 12:
-                        categories['Morning'] += 1
-                    elif 12 <= hour < 18:
-                        categories['Daytime'] += 1
-                    elif 18 <= hour < 24:
-                        categories['Evening'] += 1
-                    else:
-                        categories['Night'] += 1
-                except (KeyError, ValueError):
+                    hours.append(int(line[11:13]))
+                except ValueError:
                     continue
-
-            if len(data) < 100:
-                break
-            page += 1
-
-        print(f"{repo_count} commits")
-
-    return categories
+    except subprocess.TimeoutExpired:
+        print("    [WARN] Commit time analysis timeout", file=sys.stderr)
+    except Exception as e:
+        print(f"    [WARN] Commit time analysis error: {e}", file=sys.stderr)
+    return hours
 
 
-def generate_profile_stats(commit_stats: dict, repos: list) -> tuple:
-    """生成 commit 时间分布和语言仓库分布的 Markdown 文本"""
+def merge_stats(total: dict, part: dict) -> None:
+    """把单仓库的语言统计合并进总表"""
+    for lang, counts in part.items():
+        total[lang]['added'] += counts['added']
+        total[lang]['deleted'] += counts['deleted']
+
+
+def sort_stats(stats: dict) -> list:
+    """按总行数降序排列"""
+    return sorted(stats.items(), key=lambda x: x[1]['added'] + x[1]['deleted'], reverse=True)
+
+
+def render_lang_block(stats: dict, top_n: int, width: int, empty_text: str) -> list[str]:
+    """渲染语言统计代码块（不含标题），本周和年度两块共用同一格式"""
+    lines = ['```text']
+    sorted_stats = sort_stats(stats)
+    total_lines = sum(s['added'] + s['deleted'] for _, s in sorted_stats)
+
+    if total_lines == 0:
+        lines.append(empty_text)
+        lines.append('```')
+        return lines
+
+    shown = sorted_stats[:top_n]
+    max_lang_len = max(len(lang) for lang, _ in shown)
+
+    for rank, (lang, counts) in enumerate(shown, 1):
+        added = counts['added']
+        deleted = counts['deleted']
+        percentage = (added + deleted) / total_lines * 100
+        lines.append(
+            f"{rank:2d}. {lang.ljust(max_lang_len)} "
+            f"+{format_number(added).rjust(7)}/ -{format_number(deleted).rjust(7)} "
+            f"{generate_bar(percentage, width)} {percentage:5.1f}%"
+        )
+
+    lines.append('```')
+    return lines
+
+
+# 作息分档（按作者本地时间）
+TIME_CATEGORIES = [
+    ('Morning', 6, 12, '🌞'),
+    ('Daytime', 12, 18, '🌆'),
+    ('Evening', 18, 24, '🌃'),
+    ('Night', 0, 6, '🌙'),
+]
+TIME_TITLES = {
+    'Morning': "I'm an Early 🐤",
+    'Daytime': "I'm a Daytime ☀️",
+    'Evening': "I'm an Evening 🌇",
+    'Night': "I'm a Night 🦉",
+}
+# 最高档领先第二档不足此百分点时，改用“早半天 / 晚半天”合并判定，避免标题频繁跳动
+TITLE_MARGIN = 5.0
+
+
+def pick_time_title(categories: dict, total: int) -> str:
+    """根据分档占比选标题"""
+    ranked = sorted(categories.items(), key=lambda x: x[1], reverse=True)
+    top_name, top_count = ranked[0]
+    second_count = ranked[1][1] if len(ranked) > 1 else 0
+    margin = (top_count - second_count) / total * 100
+
+    if margin >= TITLE_MARGIN:
+        return TIME_TITLES[top_name]
+
+    late = categories['Evening'] + categories['Night']
+    early = categories['Morning'] + categories['Daytime']
+    return TIME_TITLES['Night'] if late >= early else TIME_TITLES['Morning']
+
+
+def peak_window(hours: list[int], span: int = 3) -> tuple[int, int]:
+    """找出提交最集中的连续 span 小时（环形），返回 (起始小时, 结束小时)"""
+    hist = [0] * 24
+    for h in hours:
+        hist[h % 24] += 1
+    best_start, best_sum = 0, -1
+    for start in range(24):
+        total = sum(hist[(start + i) % 24] for i in range(span))
+        if total > best_sum:
+            best_start, best_sum = start, total
+    return best_start, (best_start + span) % 24
+
+
+def generate_profile_stats(hours: list[int], yearly_stats: dict, profile_days: int) -> tuple[str, str]:
+    """生成 commit 时间分布和主要语言两块的 Markdown 文本"""
     # === Commit 时间分布 ===
-    total_commits = sum(commit_stats.values())
+    total_commits = len(hours)
     commit_lines = []
     if total_commits > 0:
-        max_cat = max(commit_stats, key=commit_stats.get)
-        title_map = {
-            'Morning': "I'm an Early 🐤",
-            'Daytime': "I'm a Daytime ☀️",
-            'Evening': "I'm an Evening 🌇",
-            'Night': "I'm a Night 🦉",
-        }
-        commit_lines.append(f'**{title_map.get(max_cat, "Commit Stats")}**')
+        categories = {name: 0 for name, _, _, _ in TIME_CATEGORIES}
+        for h in hours:
+            for name, start, end, _ in TIME_CATEGORIES:
+                if start <= h < end:
+                    categories[name] += 1
+                    break
+
+        commit_lines.append(f'**{pick_time_title(categories, total_commits)}**')
         commit_lines.append('```text')
-        emojis = {'Morning': '🌞', 'Daytime': '🌆', 'Evening': '🌃', 'Night': '🌙'}
-        for cat in ['Morning', 'Daytime', 'Evening', 'Night']:
-            count = commit_stats[cat]
-            pct = (count / total_commits) * 100
-            bar = generate_bar(pct, 25)
+        for name, _, _, emoji in TIME_CATEGORIES:
+            count = categories[name]
+            pct = count / total_commits * 100
             commit_lines.append(
-                f"{emojis[cat]} {cat:<20}{count:>5} commits{' ' * 10}{bar} {pct:5.2f} %"
+                f"{emoji} {name:<20}{count:>5} commits{' ' * 10}{generate_bar(pct, 25)} {pct:5.2f} %"
             )
+        start, end = peak_window(hours)
+        commit_lines.append('')
+        commit_lines.append(
+            f"⏰ Peak hours: {start:02d}:00 - {end:02d}:00   "
+            f"({total_commits:,} commits in the last {profile_days} days)"
+        )
+        commit_lines.append('```')
+    else:
+        commit_lines.append('**Commit Stats**')
+        commit_lines.append('```text')
+        commit_lines.append(f'No commits in the last {profile_days} days')
         commit_lines.append('```')
 
-    # === 语言仓库分布 ===
-    lang_count = defaultdict(int)
-    for repo in repos:
-        lang = repo.get('language')
-        if lang:
-            lang_count[lang] += 1
-
+    # === 主要语言（按过去一年本人代码行数） ===
+    sorted_yearly = sort_stats(yearly_stats)
     repo_lang_lines = []
-    if lang_count:
-        sorted_langs = sorted(lang_count.items(), key=lambda x: x[1], reverse=True)
-        top_lang = sorted_langs[0][0]
-        total_repos = sum(lang_count.values())
-        max_name_len = max(len(lang) for lang, _ in sorted_langs[:5])
-
-        repo_lang_lines.append(f'**I Mostly Code in {top_lang}**')
-        repo_lang_lines.append('```text')
-        for lang, count in sorted_langs[:5]:
-            pct = (count / total_repos) * 100
-            bar = generate_bar(pct, 25)
-            repo_lang_lines.append(
-                f"{lang:<{max_name_len}}{count:>8} repos{' ' * 13}{bar} {pct:5.2f} %"
-            )
-        repo_lang_lines.append('```')
+    if sorted_yearly and sum(s['added'] + s['deleted'] for _, s in sorted_yearly) > 0:
+        repo_lang_lines.append(f'**I Mostly Code in {sorted_yearly[0][0]}**')
+    else:
+        repo_lang_lines.append('**Language Stats**')
+    repo_lang_lines.extend(render_lang_block(
+        yearly_stats, top_n=5, width=25,
+        empty_text=f'No code changes in the last {profile_days} days',
+    ))
 
     return '\n'.join(commit_lines), '\n'.join(repo_lang_lines)
 
@@ -424,13 +496,14 @@ def main():
     username = os.environ.get('GITHUB_USERNAME', 'icloudza')
     token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
     output_file = os.environ.get('OUTPUT_FILE', 'assets/languages-stats.md')
-    since_days = int(os.environ.get('SINCE_DAYS', '7'))  # 默认统计最近7天
+    since_days = int(os.environ.get('SINCE_DAYS', '7'))        # 本周统计窗口
+    profile_days = int(os.environ.get('PROFILE_DAYS', '365'))  # 作息画像 / 主要语言窗口
 
     if not token:
         print("[ERROR] GH_TOKEN environment variable is required", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Starting analysis for {username} (last {since_days} days)...")
+    print(f"Starting analysis for {username} (weekly: {since_days} days, profile: {profile_days} days)...")
 
     # 获取作者邮箱
     author_emails = get_author_emails(username, token)
@@ -446,125 +519,84 @@ def main():
 
     # 获取仓库列表（包括私有）
     repos = get_all_repos(username, token)
-    print(f"\nFound {len(repos)} repositories (excluding forks)")
+    print(f"\nFound {len(repos)} repositories (excluding forks and archived)")
 
     private_count = sum(1 for r in repos if r['private'])
     public_count = len(repos) - private_count
     print(f"   Public: {public_count}  Private: {private_count}")
 
-    # 汇总统计
-    total_stats = defaultdict(lambda: {'added': 0, 'deleted': 0})
+    # 汇总统计：本周 / 年度 / 提交时间
+    weekly_stats = defaultdict(lambda: {'added': 0, 'deleted': 0})
+    yearly_stats = defaultdict(lambda: {'added': 0, 'deleted': 0})
+    commit_hours: list[int] = []
 
-    # 创建临时目录
+    # 一份 profile_days 窗口的浅克隆同时服务三块统计
     with tempfile.TemporaryDirectory() as tmpdir:
         for i, repo in enumerate(repos, 1):
             visibility = "[Private]" if repo['private'] else "[Public]"
             print(f"\n[{i}/{len(repos)}] {visibility} Analyzing repo...")
 
-            repo_path = os.path.join(tmpdir, repo['name'])
+            repo_path = os.path.join(tmpdir, f"repo{i}")
 
-            # 克隆仓库
-            clone_status = clone_repo(repo, repo_path, token, since_days)
+            clone_status = clone_repo(repo, repo_path, token, profile_days)
             if clone_status == CLONE_OK:
-                # 分析仓库（只统计最近N天）
-                repo_stats = analyze_repo(repo_path, author_emails, since_days)
+                week = analyze_repo(repo_path, author_emails, since_days)
+                year = analyze_repo(repo_path, author_emails, profile_days)
+                hours = get_commit_hours(repo_path, author_emails, profile_days)
 
-                # 显示仓库统计
-                if repo_stats:
-                    repo_total = sum(s['added'] + s['deleted'] for s in repo_stats.values())
-                    top_lang = max(repo_stats.items(), key=lambda x: x[1]['added'] + x[1]['deleted'])[0]
-                    print(f"    [OK] {repo_total:,} lines (main: {top_lang})")
+                merge_stats(weekly_stats, week)
+                merge_stats(yearly_stats, year)
+                commit_hours.extend(hours)
+
+                week_total = sum(s['added'] + s['deleted'] for s in week.values())
+                year_total = sum(s['added'] + s['deleted'] for s in year.values())
+                if week_total:
+                    top_lang = sort_stats(week)[0][0]
+                    print(f"    [OK] week: {week_total:,} lines (main: {top_lang})")
                 else:
                     print(f"    [--] No commits this week")
+                print(f"    [..] year: {year_total:,} lines, {len(hours)} commits")
 
-                # 合并统计
-                for lang, counts in repo_stats.items():
-                    total_stats[lang]['added'] += counts['added']
-                    total_stats[lang]['deleted'] += counts['deleted']
-
-                # 清理
                 shutil.rmtree(repo_path, ignore_errors=True)
             elif clone_status == CLONE_NO_COMMITS:
-                print(f"    [--] No commits this week")
+                print(f"    [--] No commits in the last {profile_days} days")
             else:
                 print(f"    [WARN] Clone failed, skipping")
 
-    # 计算总行数和百分比
-    total_lines = sum(s['added'] + s['deleted'] for s in total_stats.values())
-
-    # 本周没有任何代码变动不算失败：写出占位统计，后续 commit 分布等仍正常生成
-    if total_lines == 0:
+    # === 本周语言统计 ===
+    weekly_total = sum(s['added'] + s['deleted'] for s in weekly_stats.values())
+    if weekly_total == 0:
         print(f"\n[--] No code changes in the last {since_days} days")
-        sorted_stats = []
     else:
-        print(f"\nTotal: {total_lines:,} lines changed")
-        # 排序（按总行数降序）
-        sorted_stats = sorted(
-            total_stats.items(),
-            key=lambda x: x[1]['added'] + x[1]['deleted'],
-            reverse=True
-        )
+        print(f"\nTotal this week: {weekly_total:,} lines changed")
 
-    # 生成输出
-    lines = []
-    lines.append("```text")
-
-    if not sorted_stats:
-        lines.append(f"No code changes in the last {since_days} days")
-
-    # 找出最长的语言名称用于对齐
-    max_lang_len = max(len(lang) for lang, _ in sorted_stats[:10]) if sorted_stats else 10
-
-    for rank, (lang, counts) in enumerate(sorted_stats[:5], 1):  # 只显示前5种语言
-        added = counts['added']
-        deleted = counts['deleted']
-        total = added + deleted
-        percentage = (total / total_lines) * 100
-
-        # 格式化输出 - 带排名
-        lang_padded = lang.ljust(max_lang_len)
-        added_str = format_number(added).rjust(7)
-        deleted_str = format_number(deleted).rjust(7)
-        bar = generate_bar(percentage)
-        pct_str = f"{percentage:5.1f}%"
-
-        # 排名格式：1. 2. 3. ... 10.
-        rank_str = f"{rank:2d}."
-        lines.append(f"{rank_str} {lang_padded} +{added_str}/ -{deleted_str} {bar} {pct_str}")
-
-    lines.append("```")
-
-    # 输出结果
-    output = '\n'.join(lines)
-    print("\n" + "="*60)
+    output = '\n'.join(render_lang_block(
+        weekly_stats, top_n=5, width=21,
+        empty_text=f'No code changes in the last {since_days} days',
+    ))
+    print("\n" + "=" * 60)
     print(output)
-    print("="*60)
+    print("=" * 60)
 
-    # 写入文件
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     with open(output_file, 'w') as f:
         f.write(output)
-
     print(f"\n[OK] Results saved to {output_file}")
 
-    # 获取 commit 时间分布（通过 GitHub API，覆盖全部历史）
-    utc_offset = int(os.environ.get('UTC_OFFSET', '8'))
-    print(f"\nAnalyzing commit time distribution (UTC+{utc_offset})...")
-    commit_stats = get_commit_time_stats(username, token, repos, utc_offset)
-    total_commits = sum(commit_stats.values())
-    print(f"Total: {total_commits} commits")
+    # === 作息画像 + 主要语言 ===
+    yearly_total = sum(s['added'] + s['deleted'] for s in yearly_stats.values())
+    print(f"\nProfile window: {len(commit_hours):,} commits, {yearly_total:,} lines changed")
 
-    # 生成 profile 统计
-    commit_output, repo_lang_output = generate_profile_stats(commit_stats, repos)
+    commit_output, repo_lang_output = generate_profile_stats(commit_hours, yearly_stats, profile_days)
+    print("\n" + commit_output)
+    print(repo_lang_output)
 
-    # 写入 commit 时间分布
     stats_dir = os.path.dirname(output_file)
     commit_file = os.path.join(stats_dir, 'commit-stats.md')
     with open(commit_file, 'w') as f:
         f.write(commit_output)
-    print(f"[OK] Commit stats saved to {commit_file}")
+    print(f"\n[OK] Commit stats saved to {commit_file}")
 
-    # 写入语言仓库分布
     repo_lang_file = os.path.join(stats_dir, 'repo-lang-stats.md')
     with open(repo_lang_file, 'w') as f:
         f.write(repo_lang_output)

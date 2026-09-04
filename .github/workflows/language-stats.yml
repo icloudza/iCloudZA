@@ -30,7 +30,8 @@ jobs:
           GITHUB_USERNAME: icloudza
           AUTHOR_EMAILS: icloudza,icloudza@users.noreply.github.com,cloudza
           OUTPUT_FILE: assets/languages-stats.md
-          SINCE_DAYS: '7'
+          SINCE_DAYS: '7'      # 本周语言统计窗口
+          PROFILE_DAYS: '365'  # 作息画像 / 主要语言窗口
         run: python scripts/language_stats.py
 
       - name: Update README
