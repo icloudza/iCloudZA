@@ -227,6 +227,29 @@ def get_author_emails(username: str, token: str) -> list[str]:
     return emails
 
 
+def get_shallow_boundary(repo_path: str) -> list[str]:
+    """返回浅克隆的边界提交哈希列表
+
+    边界提交在本地没有父提交，git 会把它的 diff 显示为整棵树新增，
+    统计行数时必须排除，否则一次小提交会被算成整个仓库的代码量。
+    仓库本身的真实根提交不在 shallow 文件里，不受影响。
+    """
+    try:
+        result = subprocess.run(
+            ['git', '-C', repo_path, 'rev-parse', '--git-path', 'shallow'],
+            capture_output=True, text=True, timeout=30,
+        )
+        shallow_file = result.stdout.strip()
+        if not os.path.isabs(shallow_file):
+            shallow_file = os.path.join(repo_path, shallow_file)
+        if os.path.exists(shallow_file):
+            with open(shallow_file) as f:
+                return [line.strip() for line in f if line.strip()]
+    except Exception:
+        pass
+    return []
+
+
 def analyze_repo(repo_path: str, author_emails: list[str], since_days: int = 7) -> dict:
     """分析单个仓库的提交历史，只统计指定作者最近N天的提交"""
     stats = defaultdict(lambda: {'added': 0, 'deleted': 0})
@@ -237,8 +260,12 @@ def analyze_repo(repo_path: str, author_emails: list[str], since_days: int = 7) 
         f'--since={since_days} days ago',
         '--numstat',
         '--format=',
-        '--no-merges'
+        '--no-merges',
+        'HEAD',
     ]
+    # 排除浅克隆边界提交（见 get_shallow_boundary）
+    for commit in get_shallow_boundary(repo_path):
+        cmd.append(f'^{commit}')
     for email in author_emails:
         cmd.append(f'--author={email}')
 
