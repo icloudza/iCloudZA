@@ -6,7 +6,7 @@ GitHub 语言统计分析脚本
   2. 作息画像（PROFILE_DAYS，默认 365 天）：按提交时的本地时区统计提交时段
   3. 主要语言（PROFILE_DAYS，默认 365 天）：按语言汇总本人代码行数
 三块共用同一份 PROFILE_DAYS 窗口的浅克隆，不额外调用 commit API。
-结果渲染为带加载动画的 SVG 卡片（见 stats_svg.py），写入 OUTPUT_DIR（默认 assets/）。
+结果渲染为带加载动画的 SVG 卡片（见 stats_svg.py），写入 OUTPUT_DIR（默认 assets/）
 """
 
 import os
