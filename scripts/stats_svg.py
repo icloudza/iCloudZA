@@ -7,7 +7,7 @@
 
 from html import escape
 
-FULL_W = 830          # 与 GitHub README 正文宽度一致
+FULL_W = 830          # 与 GitHub README 正文宽度一致。
 GAP = 16
 HALF_W = (FULL_W - GAP) // 2
 FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"
