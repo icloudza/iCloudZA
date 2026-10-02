@@ -3,10 +3,8 @@
 # Hi there 👋
 
 <p align="left">
-  <img src="assets/languages-light.svg#gh-light-mode-only" width="830" alt="languages">
-  <img src="assets/languages-dark.svg#gh-dark-mode-only" width="830" alt="languages">
+  <img src="assets/film-languages.svg" width="830" alt="Seven Days, One Year — the languages I wrote this week and this year">
 </p>
 <p align="left">
-  <img src="assets/coding-activity-light.svg#gh-light-mode-only" width="830" alt="coding activity">
-  <img src="assets/coding-activity-dark.svg#gh-dark-mode-only" width="830" alt="coding activity">
+  <img src="assets/film-activity.svg" width="830" alt="I Rarely See the Morning — when I commit, by hour and by weekday">
 </p>
