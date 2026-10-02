@@ -3,5 +3,5 @@
 # Hi there 👋
 
 <p align="left">
-  <img src="assets/profile-film.svg" width="830" alt="I Rarely See the Morning — a short film about when I commit and the languages I wrote this week and this year">
+  <img src="assets/profile-film.svg" width="830" alt="The Five Elements — a short ink-wash film: this year's top five languages as wood, fire, earth, metal and water, with yearly and weekly line counts">
 </p>
