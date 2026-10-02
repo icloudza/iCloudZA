@@ -9,8 +9,7 @@
 
 - sky.webp     16:9 夜空：银河从群山背后斜向右上升起，穿过两排行星之间（海报背景，开场镜头也截取它的上半部分）
 - planet.webp  气态行星条带纹理，水平可平铺；在 SVG 里滑动模拟自转
-- fonts/       Cormorant Garamond、Noto Serif SC、Noto Serif KR、EB Garamond、Zhi Mang Xing 的子集，
-               授权见 fonts/OFL.txt（SIL OFL 1.1）
+- fonts/       Cormorant Garamond、Noto Serif SC、Zhi Mang Xing 的子集，授权见 fonts/OFL.txt（SIL OFL 1.1）
 """
 
 import io
@@ -168,14 +167,12 @@ def fonts():
     from fontTools.ttLib import TTFont
     from fontTools.varLib import instancer
     sys.path.insert(0, HERE)
-    from cinema_svg import FONT_FILES, brush_chars, word_chars, zh_chars
+    from cinema_svg import FONT_FILES, brush_chars, zh_chars
 
     ascii_ = ''.join(chr(c) for c in range(0x20, 0x7f))
     jobs = [   # (Google Fonts 家族, 字重, 需要的字, 输出文件, google/fonts 仓库里的 OFL 目录)
-        ('Cormorant Garamond', 500, ascii_ + '·–—‘’“”…\u00a0\u2002\u2003' + word_chars('latin'), FONT_FILES['CG'], 'cormorantgaramond'),
+        ('Cormorant Garamond', 500, ascii_ + '·–—‘’“”…\u00a0\u2002\u2003', FONT_FILES['CG'], 'cormorantgaramond'),
         ('Noto Serif SC', 500, zh_chars(), FONT_FILES['NS'], 'notoserifsc'),
-        ('Noto Serif KR', 500, word_chars('hangul'), FONT_FILES['KR'], 'notoserifkr'),
-        ('EB Garamond', 500, word_chars('greek'), FONT_FILES['GR'], 'ebgaramond'),
         ('Zhi Mang Xing', 400, brush_chars(), FONT_FILES['ZM'], 'zhimangxing'),
     ]
     os.makedirs(f'{OUT}/fonts', exist_ok=True)

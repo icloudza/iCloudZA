@@ -3,11 +3,14 @@
 
 风格参考短片《我从未见过太阳》：纯黑与冷银灰，唯一的暖金色光；宽字距衬线体，中英双语字幕；镜头之间淡入淡出。
 16:9 画幅：开场在 2.39:1 的宽银幕带里播（字幕放在下方黑边），约 30 秒后定格为一整张海报。
+分镜：光标问话 → 星轨延时 → 流星雨划过「时辰群山」→ 本周的行星迎面掠过 → 本年的行星系，恒星坍缩 →
+黑洞与吸积盘，光子环闪出钻石环 → 日出与片名 → 片名滑到左上角，定格海报。
 
 性能约定（GitHub 用 <img> 显示 SVG，任何一处动画在跑，整张图每帧都要重绘）：
 - 镜头只在自己的时间窗内可见，窗口外是 visibility:hidden，不参与绘制；
-- 镜头里的动画都是有限次、只在窗口内运行，没有 infinite；
-- 海报帧完全静止，开场播完后图片不再重绘。
+- 镜头里的动画都是有限次、只在窗口内运行；
+- 海报出现前整组 visibility:hidden，海报上的环境动画（星空漂移、星光闪烁、行星自转、月晕呼吸、流星）
+  从海报出现时才开始循环，只动透明度和位移，长周期、缓入缓出。
 静态属性即终态：动画不运行的环境（含 prefers-reduced-motion）直接显示海报帧。
 位图素材与字体子集在 assets/cinema/，由 make_assets.py 离线生成后提交，渲染时 base64 内嵌。
 """
@@ -33,12 +36,11 @@ LANG_COLORS = {
 }
 DEFAULT_LANG_COLOR = '#8b949e'
 
-# 字体：内嵌子集优先，缺字时按顺序回退到下一个字体
+# 字体：内嵌子集优先，缺字时按顺序回退到下一个字体（中文字幕里的数字和语言名会回退到 CG）
 EN = "CG,'Cormorant Garamond','EB Garamond',Garamond,'Times New Roman',serif"
 ZH = "NS,CG,'Noto Serif SC','Source Han Serif SC','Songti SC',STSong,SimSun,serif"
 BRUSH = "ZM,'Zhi Mang Xing',STXingkai,'Xingkai SC',KaiTi,cursive"
-SEA = "CG,NS,KR,GR,'Noto Serif','Noto Serif CJK SC',serif"   # 多语种单词：拉丁 / 西里尔、汉字、韩文、希腊文各走各的子集
-FONT_FILES = {'CG': 'cg500.woff2', 'NS': 'nss500.woff2', 'ZM': 'zmx400.woff2', 'KR': 'kr500.woff2', 'GR': 'gr500.woff2'}
+FONT_FILES = {'CG': 'cg500.woff2', 'NS': 'nss500.woff2', 'ZM': 'zmx400.woff2'}
 
 INK, SILVER, MUTED = '#eef1f6', '#b9c1ce', '#7f8898'
 GOLD, GOLD_CORE = '#ffc978', '#fff3dc'
@@ -55,14 +57,7 @@ RARE = {
 }
 PROFILE = {'Morning': "an early bird", 'Daytime': "a daytime coder", 'Evening': "an evening coder", 'Night': "a night owl"}
 COMMON = {'Night': ('深夜', 'night'), 'Evening': ('傍晚', 'evening'), 'Morning': ('清晨', 'morning'), 'Daytime': ('白天', 'day')}
-
-# 致敬原片里由各国语言的「海」组成的海面：这里换成各国语言的「语言」；片名卡的文字环用各国语言的「夜」
-LANG_WORDS = ('language', '语言', 'langue', 'Sprache', 'lengua', 'язык', '言語', '언어', 'lingua', 'língua', 'taal', 'språk',
-              'dil', 'bahasa', 'kieli', 'język', 'lugha', 'ngôn ngữ', 'γλώσσα', 'jazyk', 'nyelv', 'lingvo', 'iaith', 'teanga',
-              'tungumál', 'мова', 'sprog', 'jezik', 'kalba', 'valoda', 'keel', 'limbă', 'wika', 'reo', 'ʻōlelo')
-NIGHT_WORDS = ('night', '夜晚', 'nuit', 'Nacht', 'noche', 'ночь', '夜', '밤', 'notte', 'noite', 'nacht', 'natt', 'gece', 'malam',
-               'yö', 'noc', 'usiku', 'đêm', 'νύχτα', 'éjszaka', 'nox', 'nokto', 'nos', 'oíche', 'nótt', 'ніч', 'naktis', 'nakts',
-               'öö', 'noapte', 'gabi', 'pō', 'nat')
+WHEN_ZH = ['凌晨'] * 6 + ['上午'] * 6 + ['中午'] + ['下午'] * 5 + ['晚上'] * 6
 
 # 片名（书法字体）和中文字幕模板。make_assets.py 按这里出现的字做字体子集，改文案后要重新生成字体
 TITLE = '我很少见到{p}'
@@ -71,12 +66,12 @@ ZH_TEXT = {
     'answer': '很少。',
     'commits_dark': '过去{span}，我提交了 {n} 次，大多在天黑以后。',
     'commits_light': '过去{span}，我提交了 {n} 次，大多在天亮以后。',
-    'lines': '这{span}，我改动了 {n} 行代码。',
-    'lines_none': '这{span}，我一行代码也没写。',
-    'week_major': '大多是 {lang}。',
-    'week_minor': '{lang} 写得最多。',
+    'awake': '{when} {h} 点，是我最清醒的时候。',
+    'week_major': '这{span}，我改动了 {n} 行代码，大多是 {lang}。',
+    'week_minor': '这{span}，我改动了 {n} 行代码，{lang} 写得最多。',
+    'week_none': '这{span}，我一行代码也没写。',
     'year': '这{span}，我说得最多的是 {lang}。',
-    'rare': '我很少见到{p}。',
+    'total': '一共 {k} 种语言，{n} 行。',
     'glow': '但每个{c}，都有一束光。',
     'quiet': '很安静。',
 }
@@ -85,12 +80,12 @@ EN_SPANS = {7: 'seven days', 365: 'a year'}
 
 
 def _cjk(text: str) -> set:
-    return {ch for ch in text if ord(ch) > 0x2e80 and not 0xac00 <= ord(ch) <= 0xd7af}
+    return {ch for ch in text if ord(ch) > 0x2e80}
 
 
 def zh_chars() -> str:
-    """字幕字体子集需要的汉字和中文标点（含多语种单词里的汉字）"""
-    text = (''.join(ZH_TEXT.values()) + ''.join(ZH_SPANS.values()) + '天' + ''.join(LANG_WORDS + NIGHT_WORDS)
+    """字幕字体子集需要的汉字和中文标点"""
+    text = (''.join(ZH_TEXT.values()) + ''.join(ZH_SPANS.values()) + '天' + ''.join(WHEN_ZH)
             + ''.join(v[0] for v in RARE.values()) + ''.join(v[0] for v in COMMON.values()))
     return ''.join(sorted(_cjk(text)))
 
@@ -99,20 +94,17 @@ def brush_chars() -> str:
     return ''.join(sorted(_cjk(TITLE + ''.join(v[0] for v in RARE.values()))))
 
 
-def word_chars(script: str) -> str:
-    """多语种单词里各文字系统用到的字符：latin（含西里尔）/ hangul / greek"""
-    chars = set(''.join(LANG_WORDS + NIGHT_WORDS))
-    pick = {'hangul': lambda o: 0xac00 <= o <= 0xd7af, 'greek': lambda o: 0x370 <= o <= 0x3ff,
-            'latin': lambda o: 0x7f < o < 0x2e80 and not 0x370 <= o <= 0x3ff}[script]
-    return ''.join(sorted(ch for ch in chars if pick(ord(ch))))
-
-
 BASE_CSS = (
     "@keyframes §in{from{opacity:0}}"
     "@keyframes §out{to{opacity:0}}"
-    "@keyframes §rise{from{opacity:0;transform:translateY(8px)}}"
     "@keyframes §blink{50%{opacity:.12}}"
     "@keyframes §dash{from{stroke-dashoffset:1}}"
+    "@keyframes §show{from{opacity:0;visibility:hidden}}"
+    "@keyframes §tw{50%{opacity:.22}}"
+    "@keyframes §breathe{50%{opacity:.45}}"
+    "@keyframes §roll{to{transform:translateX(-420px)}}"
+    "@keyframes §drift{from{transform:translateX(-8px) rotate(-.45deg)}to{transform:translateX(8px) rotate(.45deg)}}"
+    "@keyframes §met{0%{opacity:0;transform:translateX(0)}2%{opacity:1}9%,100%{opacity:0;transform:translateX(320px)}}"
     ".§sub{paint-order:stroke;stroke:#000;stroke-opacity:.55;stroke-width:3px;stroke-linejoin:round}"
     "@media(prefers-reduced-motion:reduce){*{animation:none!important}}"
 )
@@ -212,9 +204,10 @@ class _Film:
         return f'<g visibility="hidden" opacity="0" style="animation:{k} {d:.2f}s linear {t0:.2f}s">{body}</g>'
 
     def camera(self, body: str, cx: float, cy: float, s0: float, s1: float, t0: float, dur: float,
-               dx: float = 0, dy: float = 0) -> str:
-        """运镜：以 (cx, cy) 为中心推拉（s0→s1）并平移（dx, dy），只跑一次"""
-        k = self.kf(f"from{{transform:scale({s0})}}to{{transform:translate({dx}px,{dy}px) scale({s1})}}")
+               dx: float = 0, dy: float = 0, r0: float = 0, r1: float = 0) -> str:
+        """运镜：以 (cx, cy) 为中心推拉（s0→s1）、平移（dx, dy）、侧倾（r0→r1 度），只跑一次"""
+        k = self.kf(f"from{{transform:rotate({r0}deg) scale({s0})}}"
+                    f"to{{transform:translate({dx}px,{dy}px) rotate({r1}deg) scale({s1})}}")
         return (f'<g transform="translate({_n(cx)} {_n(cy)})"><g style="animation:{k} {dur:.2f}s ease-in-out {t0:.2f}s both">'
                 f'<g transform="translate({_n(-cx)} {_n(-cy)})">{body}</g></g></g>')
 
@@ -225,6 +218,15 @@ class _Film:
                 f'<text x="{_n(W / 2)}" y="452" font-family="{EN}" font-size="14.5" text-anchor="middle" '
                 f'fill="{SILVER}" letter-spacing=".4">{escape(en)}</text>')
         return self.window(t0, t1, body, fade=.45)
+
+    def flare(self, x: float, y: float, t: float, dur: float = 1.2, width: float = 700, color: str = '#ffe2b5') -> str:
+        """横贯画面的变形镜头光斑：一闪而过"""
+        streak = self.lin([(0, color, 0), (.5, color, .85), (1, color, 0)])
+        k = self.kf("0%{visibility:visible;opacity:0;transform:scaleX(.2)}35%{opacity:1}"
+                    "100%{visibility:visible;opacity:0;transform:scaleX(1)}")
+        return (f'<g transform="translate({_n(x)} {_n(y)})"><g visibility="hidden" style="animation:{k} {dur}s ease-out {t:.2f}s">'
+                f'<rect x="{_n(-width / 2)}" y="-.8" width="{_n(width)}" height="1.6" fill="url(#{streak})"/>'
+                f'<rect x="{_n(-width / 3)}" y="-5" width="{_n(width / 1.5)}" height="10" fill="url(#{streak})" opacity=".15"/></g></g>')
 
     # ---------- 元素 ----------
 
@@ -269,16 +271,20 @@ class _Film:
                 f'<g style="animation:§blink 1.05s steps(1) {start:.2f}s {blinks}">'
                 f'{self.light(left + 5, y - size * .36, h=size * 1.2, flare=.5)}</g></g></g>')
 
-    def stars(self, n: int, area=(0, 0, W, H), op: float = .75) -> str:
-        """静态矢量星点（不闪烁：任何循环动画都会让整张图每帧重绘）"""
+    def stars(self, n: int, area=(0, 0, W, H), op: float = .75, twinkle_at: float = None) -> str:
+        """矢量星点：开场镜头里是静态的；给了 twinkle_at 就分三组，从那一刻起各自以不同周期无限闪烁"""
         r = self.rng
         x0, y0, x1, y1 = area
         pts = [(r.uniform(x0, x1), r.uniform(y0, y1)) for _ in range(n)]
+        if twinkle_at is not None:
+            return ''.join(f'<path d="{_dots(pts[k::3])}" fill="none" stroke="#eef3fb" stroke-width="{1.1 + k * .35:.2f}" '
+                           f'stroke-linecap="round" opacity="{op}" style="animation:§tw {dur}s ease-in-out {twinkle_at + k * 1.3:.1f}s infinite"/>'
+                           for k, dur in enumerate((3.7, 5.3, 7.1)))
         big = pts[:n // 6]
         return (f'<path d="{_dots(pts[n // 6:])}" fill="none" stroke="#e8eef8" stroke-width="1.1" stroke-linecap="round" opacity="{op}"/>'
                 f'<path d="{_dots(big)}" fill="none" stroke="#f4f7fc" stroke-width="1.8" stroke-linecap="round" opacity="{op}"/>')
 
-    def planet(self, d: float, color: str, gold: bool = False, phase: float = 0, roll=None) -> str:
+    def planet(self, d: float, color: str, gold: bool = False, phase: float = 0, roll=None, spin_at: float = None) -> str:
         """3D 行星（以原点为中心）：条带纹理 + 球面明暗 + 晨昏线 + 边缘光；roll=(开始秒, 时长) 时纹理缓慢滑动一次，模拟自转"""
         r = d / 2
         base = _mix(color, '#8f98aa', .42)
@@ -294,13 +300,15 @@ class _Film:
         if roll:
             k = self.kf(f"to{{transform:translateX(-{_n(roll[1] * 9)}px)}}")
             texture = f'<g style="animation:{k} {roll[1]:.2f}s linear {roll[0]:.2f}s both">{texture}</g>'
+        elif spin_at is not None:
+            texture = f'<g style="animation:§roll {90 + 37 * phase:.0f}s linear {spin_at:.1f}s infinite">{texture}</g>'
         return (f'<circle r="{_n(r * 1.36)}" fill="url(#{atm})"/>'
                 f'<g clip-path="url(#{clip})"><circle r="{_n(r)}" fill="{base}"/>'
                 f'<g transform="translate({_n(-r - phase * d)} {_n(-r)}) scale({d / 128:.4f})" opacity=".5">{texture}</g>'
                 f'<circle r="{_n(r)}" fill="url(#{shade})"/></g>'
                 f'<circle r="{_n(r - .4)}" fill="none" stroke="url(#{rim})" stroke-width="{1.4 if gold else 1}"/>')
 
-    def moon(self, r: float, f: float) -> str:
+    def moon(self, r: float, f: float, breathe_at: float = None) -> str:
         """月相（以原点为中心）：f 为被照亮的比例，亮面朝右"""
         halo = self.rad([(0, '#dfe6f2', 0), (.4, '#dfe6f2', round(.16 + .14 * f, 3)), (1, '#dfe6f2', 0)])
         lit = self.rad([(0, '#fbf7ee', 1), (.7, '#e7e1d4', 1), (1, '#b9b3a6', 1)], cx=.6, cy=.4, r=.7)
@@ -313,62 +321,9 @@ class _Film:
                  f'<circle cx="{_n(-r * .1)}" cy="{_n(r * .35)}" r="{_n(r * .14)}"/></g>')
         clip = self.nid('c')
         self.defs.append(f'<clipPath id="{clip}"><path d="{d}"/></clipPath>')
-        return (f'<circle r="{_n(r * 2.6)}" fill="url(#{halo})"/><circle r="{_n(r)}" fill="#141a26"/>'
+        anim = f' style="animation:§breathe {6 + 2.3 * f:.1f}s ease-in-out {breathe_at:.1f}s infinite"' if breathe_at is not None else ''
+        return (f'<circle r="{_n(r * 2.6)}" fill="url(#{halo})"{anim}/><circle r="{_n(r)}" fill="#141a26"/>'
                 f'<g clip-path="url(#{clip})"><circle r="{_n(r)}" fill="url(#{lit})"/>{maria}</g>')
-
-    # ---------- 镜头里的大场面（坐标都在宽银幕带内：830×347） ----------
-
-    def word_sea(self, words, t0: float, t1: float, hy: float = 170, rows: int = 8, period: float = 5.5) -> str:
-        """文字组成的海：每行放在「单位深度」，绕地平线上的消失点放大即透视飞越；各行错开起跑，只在镜头窗口内循环"""
-        r = self.rng
-        k = self.kf("0%{transform:scale(.16);opacity:0}16%{opacity:.75}80%{opacity:.9}100%{transform:scale(4.4);opacity:0}")
-        glow = self.lin([(0, '#8fa3c7', 0), (.5, '#8fa3c7', .22), (1, '#8fa3c7', 0)], x2=0, y2=1)
-        path = self.lin([(0, GOLD, .55), (1, GOLD, 0)], x2=0, y2=1)
-        out = [f'<rect y="{_n(hy - 30)}" width="{W}" height="60" fill="url(#{glow})"/>']
-        for i in range(rows):
-            seq = list(words)
-            r.shuffle(seq)
-            text = escape('  '.join(seq + seq[:9]))
-            delay = t0 - period + i * period / rows
-            runs = math.ceil((t1 - delay) / period)
-            out.append(f'<g transform="translate({_n(W / 2)} {_n(hy)})"><g style="animation:{k} {period}s cubic-bezier(.6,0,.96,.52) '
-                       f'{delay:.2f}s {runs}"><text x="{r.uniform(-1000, -900):.0f}" y="40" font-family="{SEA}" font-size="9" '
-                       f'fill="#b3bfd2">{text}</text></g></g>')
-        out.append(f'<rect x="{_n(W / 2 - 1.5)}" y="{_n(hy)}" width="3" height="{_n(BAND_H - hy)}" fill="url(#{path})" opacity=".8"/>'
-                   + self.light(W / 2, hy - 9, h=13, flare=1.3))
-        return ''.join(out)
-
-    def warp(self, cx: float, cy: float, t0: float, t1: float, n: int = 64) -> str:
-        """光速穿梭：从中心向外辐射的光痕加速掠过，只在镜头窗口内重复"""
-        r = self.rng
-        k = self.kf("from{stroke-dashoffset:.3}to{stroke-dashoffset:-1}")
-        core = self.rad([(0, '#ffffff', .9), (.2, '#ffe9c4', .45), (1, '#ffd9a0', 0)])
-        lines = []
-        for _ in range(n):
-            a = r.uniform(0, 2 * math.pi)
-            r0 = r.uniform(14, 70)
-            dur = r.uniform(.5, 1.1)
-            begin = t0 + r.uniform(0, .5)
-            lines.append(f'<path d="M{_n(cx + r0 * math.cos(a))} {_n(cy + r0 * math.sin(a))}L{_n(cx + 640 * math.cos(a))} '
-                         f'{_n(cy + 640 * math.sin(a))}" pathLength="1" stroke-dasharray="{r.uniform(.07, .24):.2f} 3" '
-                         f'stroke-dashoffset=".3" stroke="{GOLD if r.random() < .18 else "#e3ebfb"}" '
-                         f'stroke-opacity="{r.uniform(.35, .95):.2f}" stroke-width="{r.uniform(.5, 1.7):.1f}" '
-                         f'style="animation:{k} {dur:.2f}s cubic-bezier(.65,0,1,.6) {begin:.2f}s {math.ceil((t1 - begin) / dur)}"/>')
-        return f'<circle cx="{_n(cx)}" cy="{_n(cy)}" r="90" fill="url(#{core})"/>' + ''.join(lines)
-
-    def text_rings(self, words, cx: float, cy: float, radii, size: float = 8.5) -> str:
-        """片名卡的同心文字环（致敬原片片名卡）；静止不转，旋转的文字每帧都要重新栅格化"""
-        out = []
-        for i, rr in enumerate(radii):
-            pid = self.nid('p')
-            self.defs.append(f'<path id="{pid}" d="M{_n(rr)} 0A{_n(rr)} {_n(rr)} 0 1 1 {_n(-rr)} 0A{_n(rr)} {_n(rr)} 0 1 1 {_n(rr)} 0"/>')
-            seq = list(words)
-            self.rng.shuffle(seq)
-            text = escape('\u2002·\u2002'.join(seq * 3))
-            out.append(f'<text font-family="{SEA}" font-size="{size}" fill="#c3ccdb" opacity="{max(.12, .55 - i * .08):.2f}" '
-                       f'letter-spacing=".6" transform="rotate({self.rng.uniform(0, 360):.0f})"><textPath href="#{pid}">{text}</textPath></text>')
-        return f'<g transform="translate({_n(cx)} {_n(cy)})">{"".join(out)}</g>'
-
 
     # ---------- 输出 ----------
 
@@ -381,6 +336,7 @@ class _Film:
                f'<defs><clipPath id="§frame"><rect width="{W}" height="{H}" rx="10"/></clipPath>{"".join(self.defs)}</defs>'
                f'<g clip-path="url(#§frame)"><rect width="{W}" height="{H}" fill="#000"/>{layers}</g></svg>')
         return out.replace('§', self.uid)
+
 
 # ---------- 数据 ----------
 
@@ -425,8 +381,8 @@ def _poly(pts) -> str:
 
 # ---------- 镜头 ----------
 
-def _lineup(c: _Film, rows, total, cx, cy, slot, dmax, name_size=12.5):
-    """海报里的一排行星：直径按占比开方缩放，第一名带金色边缘光"""
+def _lineup(c: _Film, rows, total, cx, cy, slot, dmax, name_size=12.5, spin_at=None):
+    """海报里的一排行星：直径按占比开方缩放，第一名带金色边缘光；spin_at 起持续缓慢自转"""
     if not rows:
         return (f'<text x="{_n(cx)}" y="{_n(cy)}" font-family="{EN}" font-size="14" text-anchor="middle" fill="{MUTED}">'
                 f'silence, for now</text>')
@@ -436,7 +392,7 @@ def _lineup(c: _Film, rows, total, cx, cy, slot, dmax, name_size=12.5):
         x = cx + (i - (n - 1) / 2) * slot
         d = 14 + (dmax - 14) * math.sqrt(lines / top)
         pct = lines / total * 100 if total else 0
-        out.append(f'<g transform="translate({_n(x)} {_n(cy)})">{c.planet(d, _color(lang), i == 0, (i * .37) % 1)}'
+        out.append(f'<g transform="translate({_n(x)} {_n(cy)})">{c.planet(d, _color(lang), i == 0, (i * .37) % 1, spin_at=spin_at)}'
                    f'<text class="§sub" y="{_n(dmax / 2 + name_size + 8)}" font-family="{EN}" font-size="{name_size}" '
                    f'text-anchor="middle" fill="{INK}" letter-spacing=".3">{escape(lang)}</text>'
                    f'<text class="§sub" y="{_n(dmax / 2 + name_size * 2 + 11)}" font-family="{EN}" font-size="{_n(name_size * 1.04)}" '
@@ -463,6 +419,34 @@ def _star_trails(c: _Film, hours, peak, cx: float, cy: float, t0: float) -> str:
             f'<circle r="7" fill="url(#{pole})"/></g>')
 
 
+def _meteor_shower(c: _Film, t0: float, t1: float, n: int = 26) -> str:
+    """流星雨：辐射点在画面右上方之外，流星沿远离辐射点的方向划落；少数大火流星是金色、带爆闪"""
+    r = c.rng
+    rx, ry = 980, -140
+    tail = c.lin([(0, '#ffffff', 0), (1, '#eef4ff', .95)])
+    gold = c.lin([(0, GOLD, 0), (.7, GOLD, .75), (1, GOLD_CORE, 1)])
+    burst = c.rad([(0, '#fff6e6', .95), (.3, GOLD, .5), (1, GOLD, 0)])
+    out = []
+    for i in range(n):
+        x, y = r.uniform(60, 860), r.uniform(-20, 210)
+        ang = math.degrees(math.atan2(y - ry, x - rx))
+        big = i % 7 == 3
+        length = r.uniform(90, 150) if big else r.uniform(45, 110)
+        travel = r.uniform(160, 260) if big else r.uniform(90, 200)
+        dur = r.uniform(.9, 1.3) if big else r.uniform(.45, .9)
+        begin = r.uniform(t0 + .3, t1 - dur - .2)
+        head = (f'<circle r="{2.6 if big else 1.4}" fill="{GOLD_CORE if big else "#ffffff"}"/>'
+                + (f'<g style="animation:§out .5s ease-out {begin + dur * .82:.2f}s both"><circle r="16" fill="url(#{burst})"/></g>'
+                   if big else ''))
+        k = c.kf(f"0%{{visibility:visible;opacity:0;transform:translateX(0)}}12%{{opacity:1}}78%{{opacity:1}}"
+                 f"100%{{visibility:visible;opacity:0;transform:translateX({travel:.0f}px)}}")
+        out.append(f'<g transform="translate({_n(x)} {_n(y)}) rotate({ang:.1f})"><g visibility="hidden" '
+                   f'style="animation:{k} {dur:.2f}s cubic-bezier(.3,.1,.6,1) {begin:.2f}s">'
+                   f'<rect x="{_n(-length)}" y="{-1.1 if big else -.6}" width="{_n(length)}" height="{2.2 if big else 1.2}" '
+                   f'rx="1" fill="url(#{gold if big else tail})"/>{head}</g></g>')
+    return ''.join(out)
+
+
 def _flyby(c: _Film, rows, total, t0: float, t1: float, vx: float = W / 2, vy: float = 158) -> str:
     """本周的行星从远处迎面飞来、从镜头两侧掠过（绕消失点放大 = 透视）；名次倒序出场，第一名最后飞到画面右侧停住"""
     if not rows:
@@ -479,10 +463,11 @@ def _flyby(c: _Film, rows, total, t0: float, t1: float, vx: float = W / 2, vy: f
         t = t0 + j * .5
         pct = lines / total * 100 if total else 0
         if i == 0:
-            # 第一名停在画面右侧，配一个大号占比
+            # 第一名停在画面右侧，配一个大号占比和一道横贯画面的光斑
             out.append(f'<g transform="translate({_n(vx)} {_n(vy)})"><g style="animation:{k1} 2.2s cubic-bezier(.3,0,.2,1) {t:.2f}s both">'
                        f'<g transform="translate(118 8)">{c.planet(d, _color(lang), True, .2, roll=(t, t1 - t))}</g></g></g>'
-                       f'<g style="animation:§rise 1s ease-out {t + .9:.2f}s both">'
+                       + c.flare(vx + 118 * 2.3, vy + 8 * 2.3, t + 1.6, 1.4)
+                       + f'<g style="animation:§in 1s ease-out {t + .9:.2f}s both">'
                        f'<text x="110" y="150" font-family="{EN}" font-size="54" fill="{GOLD_CORE}">{pct:.1f}%</text>'
                        f'<text x="112" y="174" font-family="{EN}" font-size="14" fill="{SILVER}" letter-spacing="1.2">'
                        f'of every line this week · {escape(lang)}</text></g>')
@@ -496,10 +481,11 @@ def _flyby(c: _Film, rows, total, t0: float, t1: float, vx: float = W / 2, vy: f
 
 
 def _orbits(c: _Film, rows, total, cx: float, cy: float, t0: float, t1: float) -> str:
-    """本年的语言排成一个倾斜的行星系：名次越前离中央的恒星越近；轨道上写着语言名和占比，行星沿轨道运行"""
+    """本年的语言排成一个倾斜的行星系；轨道上写着语言名和占比，行星沿轨道运行；镜头末尾中央恒星先爆亮再坍缩"""
     if not rows:
         return ''
     sun = c.rad([(0, '#fff6e6', 1), (.25, GOLD, .8), (.6, '#ff9d42', .18), (1, '#ff9d42', 0)])
+    collapse = c.kf("0%{transform:scale(1)}55%{transform:scale(2.6)}100%{transform:scale(.05)}")
     top = rows[0][1]
     rings, bodies = [], []
     for i, (lang, lines) in enumerate(rows):
@@ -520,7 +506,39 @@ def _orbits(c: _Film, rows, total, cx: float, cy: float, t0: float, t1: float) -
         bodies.append(f'<g><animateMotion dur="{period:.1f}s" repeatCount="{math.ceil((t1 - begin) / period)}" '
                       f'begin="{begin:.2f}s" path="{d}"/>{c.planet(12 + 22 * math.sqrt(lines / top), _color(lang), i == 0, (i * .29) % 1)}</g>')
     return (f'<g transform="translate({_n(cx)} {_n(cy)}) rotate(-8)">{"".join(rings)}'
-            f'<circle r="34" fill="url(#{sun})"/>{"".join(bodies)}</g>')
+            f'<g style="animation:{collapse} 1.2s cubic-bezier(.5,0,.8,.3) {t1 - 1.3:.2f}s both"><circle r="34" fill="url(#{sun})"/></g>'
+            f'{"".join(bodies)}</g>')
+
+
+def _black_hole(c: _Film, cx: float, cy: float, t0: float, t1: float) -> str:
+    """黑洞：吸积盘横穿在黑洞前方，背面的盘面被引力透镜弯成上下两道光环；左侧朝向我们，更亮（多普勒增亮）；
+    开场一圈冲击波，结尾光子环上闪出「钻石环」，切入日出"""
+    disk = c.lin([(0, '#fff3dc', 1), (.3, GOLD, .95), (.75, '#ff9d42', .55), (1, '#b4572a', .25)])
+    halo = c.lin([(0, '#fff1d6', .95), (.5, GOLD, .25), (1, '#fff1d6', .9)], x2=0, y2=1)
+    glow = c.rad([(0, '#ffcf8a', .32), (.45, '#ff9d42', .1), (1, '#ff9d42', 0)])
+    flow = c.kf("from{stroke-dashoffset:0}to{stroke-dashoffset:-260}")
+    shock = c.kf("0%{visibility:visible;opacity:.9;transform:scale(.1)}100%{visibility:visible;opacity:0;transform:scale(1)}")
+    ring = c.kf("0%{visibility:visible;opacity:0;transform:scale(.2)}30%{opacity:1}100%{visibility:visible;opacity:0;transform:scale(1.4)}")
+    star = c.rad([(0, '#ffffff', 1), (.2, '#fff3dc', .8), (1, GOLD, 0)])
+    front = c.nid('c')
+    c.defs.append(f'<clipPath id="{front}"><rect x="-300" y="0" width="600" height="80"/></clipPath>')
+    ell = 'rx="232" ry="30"'
+    disk_layers = (f'<ellipse {ell} fill="none" stroke="url(#{disk})" stroke-width="15"/>'
+                   f'<ellipse {ell} fill="none" stroke="#fff6e6" stroke-opacity=".35" stroke-width="1.2"/>'
+                   f'<ellipse {ell} fill="none" stroke="#fff6e6" stroke-opacity=".16" stroke-width="5" stroke-dasharray="3 11 1 17 2 13" '
+                   f'style="animation:{flow} {t1 - t0:.2f}s linear {t0:.2f}s both"/>')
+    sx, sy = 0, -48
+    return (f'<g transform="translate({_n(cx)} {_n(cy)})"><circle r="230" fill="url(#{glow})"/>'
+            f'<g transform="rotate(-7)">{disk_layers}</g>'
+            f'<circle r="60" fill="none" stroke="url(#{halo})" stroke-width="20" opacity=".55"/>'
+            f'<circle r="51" fill="none" stroke="url(#{halo})" stroke-width="5"/>'
+            f'<circle r="46" fill="#000"/><circle r="47.4" fill="none" stroke="#fff3dc" stroke-width="1.4"/>'
+            f'<g transform="rotate(-7)" clip-path="url(#{front})">{disk_layers}</g>'
+            f'<g visibility="hidden" style="animation:{shock} 1.4s ease-out {t0:.2f}s">'
+            f'<circle r="300" fill="none" stroke="#ffe2b5" stroke-width="2"/></g>'
+            f'<g transform="translate({sx} {sy})"><g visibility="hidden" style="animation:{ring} 1.1s ease-out {t1 - 1.2:.2f}s">'
+            f'<circle r="26" fill="url(#{star})"/><rect x="-220" y="-.8" width="440" height="1.6" fill="#fff3dc" opacity=".8"/>'
+            f'<rect x="-.8" y="-60" width="1.6" height="120" fill="#fff3dc" opacity=".5"/></g></g></g>')
 
 
 def _sunrise(c: _Film, colors, t0: float, t1: float) -> str:
@@ -572,6 +590,7 @@ def render_film(weekly: dict, weekly_days: int, yearly: dict, yearly_days: int, 
     wspan_zh = ZH_SPANS.get(weekly_days, f' {weekly_days} 天')
     pspan_zh = ZH_SPANS.get(profile_days, f' {profile_days} 天')
     yspan_zh = ZH_SPANS.get(yearly_days, f' {yearly_days} 天')
+    wspan_en = EN_SPANS.get(weekly_days, f'{weekly_days} days')
     title = TITLE.format(p=rare_zh)
     label = (f"I RARELY SEE {title_en.upper()} — I'm {PROFILE[top]}: {total:,} commits in {profile_days} days, most awake "
              f"{peak_label}, busiest on {WEEKDAYS_EN[busiest]}. This week: "
@@ -579,8 +598,27 @@ def render_film(weekly: dict, weekly_days: int, yearly: dict, yearly_days: int, 
              + (', '.join(f"{l} {v / ytotal * 100:.1f}%" for l, v in yrows) or 'nothing') + '.')
     c = _Film('F', 11, label)
     sky = c.image('sky.webp', W, H)
-    sky_band = f'<use href="#{sky}" y="{-BAND_Y}"/>'
     shots, subs = [], []
+
+    # 群山：由 24 小时提交数堆成，流星雨镜头和海报帧共用（定义一次，<use> 引用）
+    base, sw = 430, W / 24
+    mx = max(hours) or 1
+    ridge = _range([((h + .5) * sw, 14 + 86 * (n / mx) ** .85, sw * 2.4) for h, n in enumerate(hours)], base, 10, 17, curve=1.08)
+    rb = random.Random(23)
+    far = _range([(x, rb.uniform(40, 88), rb.uniform(50, 110)) for x in range(-20, W + 60, 55)], base - 8, 32, 31, rough=.6)
+    mid = _range([(x, rb.uniform(24, 58), rb.uniform(40, 80)) for x in range(-10, W + 40, 38)], base, 20, 37, rough=.8)
+    ids = {k: c.nid('p') for k in ('far', 'mid', 'ridge', 'edge')}
+    c.defs.append(f'<path id="{ids["far"]}" d="{_poly(far)}L{W + 6} {H}L-6 {H}Z"/>'
+                  f'<path id="{ids["mid"]}" d="{_poly(mid)}L{W + 6} {H}L-6 {H}Z"/>'
+                  f'<path id="{ids["ridge"]}" d="{_poly(ridge)}L{W + 6} {H}L-6 {H}Z"/><path id="{ids["edge"]}" d="{_poly(ridge)}"/>')
+    haze = c.lin([(0, '#3a4660', 0), (1, '#3a4660', .5)], x2=0, y2=1)
+    rimg = c.lin([(0, '#c9d6ea', .3), (.45, '#ffd9a0', .5), (1, '#c9d6ea', .25)])
+    px = (peak_h + .5) * sw
+    py = min(y for x, y in ridge if abs(x - px) < 2)
+    mountains_base = (f'<use href="#{ids["far"]}" fill="#0d1320"/><rect y="300" width="{W}" height="140" fill="url(#{haze})" opacity=".28"/>'
+                      f'<use href="#{ids["mid"]}" fill="#070a11"/><use href="#{ids["ridge"]}" fill="#020305"/>'
+                      f'<use href="#{ids["edge"]}" fill="none" stroke="url(#{rimg})" stroke-width=".8"/>')
+    mountains = mountains_base + c.light(px, py - 9, h=12, flare=.5)
 
     # 1 · 0–4.8s 黑场里的光标：「你见过早晨吗？」「很少。」
     shots.append(c.window(0, 4.8, c.typed(ZH_TEXT['ask'].format(p=rare_zh), 128, .9, 4.8, cps=5.5, hide_at=2.9)
@@ -590,95 +628,80 @@ def render_film(weekly: dict, weekly_days: int, yearly: dict, yearly_days: int, 
                           f'<text style="animation:§in .6s ease-out 3.9s both" x="{W / 2}" y="228" font-family="{EN}" font-size="15" '
                           f'text-anchor="middle" fill="{SILVER}">Rarely.</text>', fade=.5))
 
-    # 2 · 4.6–9.4s 星轨：一年里每个小时的提交，像一张长曝光
-    shots.append(c.window(4.6, 9.4, c.camera(_star_trails(c, hours, peak, W / 2, 150, 4.8), W / 2, 150, 1.0, 1.1, 4.6, 4.8)))
+    # 2 · 4.6–9.0s 星轨：一年里每个小时的提交，像一张长曝光
+    shots.append(c.window(4.6, 9.0, c.camera(_star_trails(c, hours, peak, W / 2, 150, 4.8), W / 2, 150, 1.0, 1.1, 4.6, 4.4)))
     if total:
         zh2 = ZH_TEXT['commits_dark' if dark >= total - dark else 'commits_light'].format(span=pspan_zh, n=f'{total:,}')
         en2 = (f"{total:,} commits in {profile_days} days — most of them "
                + (f"after dark ({dark / total * 100:.0f}%)." if dark >= total - dark else f"in daylight ({100 - dark / total * 100:.0f}%)."))
     else:
         zh2, en2 = ZH_TEXT['quiet'], "Quiet."
-    subs.append(c.subtitle(zh2, en2, 5.0, 9.3))
+    subs.append(c.subtitle(zh2, en2, 5.0, 8.9))
 
-    # 3 · 9.2–13.6s 飞越文字之海：各国语言的「语言」
-    shots.append(c.window(9.2, 13.6, c.camera(f'<g opacity=".4">{sky_band}</g>' + c.word_sea(LANG_WORDS, 9.2, 13.6),
-                                              W / 2, 170, 1.0, 1.06, 9.2, 4.4)))
-    if wtotal:
-        zh3 = ZH_TEXT['lines'].format(span=wspan_zh, n=f'{wtotal:,}')
-        en3 = f"In {EN_SPANS.get(weekly_days, f'{weekly_days} days')}, I changed {wtotal:,} lines of code."
-    else:
-        zh3, en3 = ZH_TEXT['lines_none'].format(span=wspan_zh), f"In {EN_SPANS.get(weekly_days, f'{weekly_days} days')}, I didn't write a line."
-    subs.append(c.subtitle(zh3, en3, 9.6, 13.5))
+    # 3 · 8.8–13.4s 流星雨划过「时辰群山」，金色的光站在提交最多的那个小时的山顶
+    scene = f'<g transform="translate(0 -120)"><use href="#{sky}"/>{c.stars(40, (0, 120, W, 330))}{mountains}</g>'
+    shots.append(c.window(8.8, 13.4, c.camera(scene + _meteor_shower(c, 8.8, 13.4), px, py - 120, 1.0, 1.1, 8.8, 4.6)))
+    h12 = peak_h % 12 or 12
+    subs.append(c.subtitle(ZH_TEXT['awake'].format(when=WHEN_ZH[peak_h], h=h12 if peak_h else 0),
+                           f"At {h12} {'a.m.' if peak_h < 12 else 'p.m.'}, I'm most awake.", 9.2, 13.3) if total
+                else c.subtitle(ZH_TEXT['quiet'], "Quiet.", 9.2, 13.3))
 
-    # 4 · 13.4–15.0s 冲向地平线上的光：光速穿梭，白场出
-    flash = c.kf("0%{visibility:visible;opacity:0}45%{opacity:.85}100%{visibility:visible;opacity:0}")
-    shots.append(c.window(13.4, 15.0, c.camera(c.warp(W / 2, BAND_H / 2, 13.4, 15.0), W / 2, BAND_H / 2, 1.0, 1.25, 13.4, 1.6), fade=.3)
-                 + f'<rect width="{W}" height="{BAND_H}" fill="#fff" visibility="hidden" opacity="0" style="animation:{flash} 1s ease-in-out 14.4s"/>')
-
-    # 5 · 14.8–19.6s 本周的行星迎面掠过，第一名停下
-    shots.append(c.window(14.8, 19.6, c.camera(f'<g opacity=".45">{sky_band}</g>', W / 2, BAND_H / 2, 1.3, 1.5, 14.8, 4.8)
-                          + c.stars(50, (0, 0, W, BAND_H), .6) + _flyby(c, wrows, wtotal, 14.9, 19.6)))
+    # 4 · 13.2–17.8s 本周的行星迎面掠过，第一名停下
+    shots.append(c.window(13.2, 17.8, c.camera(f'<g opacity=".45"><use href="#{sky}" y="{-BAND_Y}"/></g>', W / 2, BAND_H / 2,
+                                               1.3, 1.5, 13.2, 4.6)
+                          + c.stars(50, (0, 0, W, BAND_H), .6) + _flyby(c, wrows, wtotal, 13.3, 17.8)))
     if wrows:
         major = wrows[0][1] / wtotal >= .5
-        zh5 = ZH_TEXT['week_major' if major else 'week_minor'].format(lang=wrows[0][0])
-        en5 = f"Most of it, in {wrows[0][0]}." if major else f"Mostly {wrows[0][0]}."
+        zh4 = ZH_TEXT['week_major' if major else 'week_minor'].format(span=wspan_zh, n=f'{wtotal:,}', lang=wrows[0][0])
+        en4 = f"In {wspan_en}, I changed {wtotal:,} lines of code — " + (f"most of it in {wrows[0][0]}." if major else f"mostly {wrows[0][0]}.")
     else:
-        zh5, en5 = ZH_TEXT['quiet'], "Quiet."
-    subs.append(c.subtitle(zh5, en5, 16.4, 19.5))
+        zh4, en4 = ZH_TEXT['week_none'].format(span=wspan_zh), f"In {wspan_en}, I didn't write a line."
+    subs.append(c.subtitle(zh4, en4, 13.6, 17.7))
 
-    # 6 · 19.4–24.0s 本年的行星系
-    shots.append(c.window(19.4, 24.0, c.stars(60, (0, 0, W, BAND_H), .6) + _orbits(c, yrows, ytotal, W / 2, 150, 19.4, 24.0)))
+    # 5 · 17.6–22.2s 本年的行星系，结尾中央恒星坍缩
+    shots.append(c.window(17.6, 22.2, c.stars(60, (0, 0, W, BAND_H), .6) + _orbits(c, yrows, ytotal, W / 2, 150, 17.6, 22.2)))
     if yrows:
-        zh6 = ZH_TEXT['year'].format(span=yspan_zh, lang=yrows[0][0])
-        en6 = (f"This year, I spoke {yrows[0][0]} the most." if yearly_days == 365
+        zh5 = ZH_TEXT['year'].format(span=yspan_zh, lang=yrows[0][0])
+        en5 = (f"This year, I spoke {yrows[0][0]} the most." if yearly_days == 365
                else f"In {yearly_days} days, I spoke {yrows[0][0]} the most.")
     else:
-        zh6, en6 = ZH_TEXT['quiet'], "Quiet."
-    subs.append(c.subtitle(zh6, en6, 19.8, 23.9))
+        zh5, en5 = ZH_TEXT['quiet'], "Quiet."
+    subs.append(c.subtitle(zh5, en5, 18.0, 22.1))
 
-    # 7 · 23.8–28.0s 日出
-    shots.append(c.window(23.8, 28.0, c.camera(_sunrise(c, colors, 23.8, 28.0), W / 2, 258, 1.08, 1.0, 23.8, 4.2), fade=.8))
+    # 6 · 22.0–25.8s 黑洞：一年的代码收进一个引力中心
+    shots.append(c.window(22.0, 25.8, c.stars(80, (0, 0, W, BAND_H), .55)
+                          + c.camera(_black_hole(c, W / 2, 170, 22.0, 25.8), W / 2, 170, .92, 1.16, 22.0, 3.8, r0=-2, r1=2), fade=.4))
+    subs.append(c.subtitle(ZH_TEXT['total'].format(k=n_langs, n=f'{ytotal:,}'),
+                           f"{n_langs} language{'' if n_langs == 1 else 's'}, {ytotal:,} lines.", 22.4, 25.7))
+
+    # 7 · 25.6–30.6s 日出，片名浮现在太阳上方，随后滑到海报左上角
+    shots.append(c.window(25.6, 30.6, c.camera(_sunrise(c, colors, 25.6, 30.6), W / 2, 258, 1.08, 1.0, 25.6, 5.0)
+                          + f'<text style="animation:§in 1s ease-out 26.8s both,§out .4s ease-in 29.0s forwards" x="{W / 2}" y="148" '
+                          f'font-family="{EN}" font-size="11.5" text-anchor="middle" letter-spacing="6" fill="{GOLD_CORE}" opacity=".85">'
+                          f'I RARELY SEE {title_en.upper()}</text>', fade=.7))
     common_zh, common_en = COMMON[top if top != rare else ranked[0][0]]
-    subs.append(c.subtitle(ZH_TEXT['rare'].format(p=rare_zh), f"I rarely see {ask_en}.", 24.1, 25.9))
-    subs.append(c.subtitle(ZH_TEXT['glow'].format(c=common_zh), f"But every {common_en}, there is a light.", 26.0, 27.9)
-                if total else c.subtitle(ZH_TEXT['quiet'], "Quiet.", 26.0, 27.9))
-
-    # 8 · 27.8–30.6s 片名卡：同心文字环；书法片名随后滑到海报左上角
-    shots.append(c.window(27.8, 30.6, c.stars(60, (0, 0, W, BAND_H), .6) + c.text_rings(NIGHT_WORDS, W / 2, 168, (86, 112, 140, 170, 202))
-                          + f'<text style="animation:§in .8s ease-out 28.6s both,§out .4s ease-in 29.5s forwards" x="{W / 2}" y="210" '
-                          f'font-family="{EN}" font-size="11.5" '
-                          f'text-anchor="middle" letter-spacing="6" fill="{SILVER}">I RARELY SEE {title_en.upper()}</text>', fade=.5))
+    subs.append(c.subtitle(ZH_TEXT['glow'].format(c=common_zh), f"But every {common_en}, there is a light.", 27.2, 29.6)
+                if total else c.subtitle(ZH_TEXT['quiet'], "Quiet.", 27.2, 29.6))
     n = len(title)
-    tx, ty = (W / 2 - n * 46 / 2) - 40, (BAND_Y + 174) - 70
+    tx, ty = (W / 2 - n * 46 / 2) - 40, (BAND_Y + 118) - 70
     glide = c.kf(f"0%{{opacity:0;transform:translate({_n(tx)}px,{_n(ty)}px) scale(1.4375)}}"
                  f"20%{{opacity:1;transform:translate({_n(tx)}px,{_n(ty)}px) scale(1.4375);animation-timing-function:cubic-bezier(.6,0,.2,1)}}"
-                 f"55%{{transform:translate({_n(tx)}px,{_n(ty)}px) scale(1.4375);animation-timing-function:cubic-bezier(.6,0,.2,1)}}"
+                 f"62%{{transform:translate({_n(tx)}px,{_n(ty)}px) scale(1.4375);animation-timing-function:cubic-bezier(.6,0,.2,1)}}"
                  f"100%{{opacity:1;transform:none}}")
-    title_el = (f'<g transform="translate(40 70)"><g style="animation:{glide} 3s linear 28s both">'
+    title_el = (f'<g transform="translate(40 70)"><g style="animation:{glide} 4.2s linear 26.2s both">'
                 f'<text font-family="{BRUSH}" font-size="32" fill="{GOLD_CORE}">{title}</text></g></g>')
 
-    # 海报帧（静止）：银河、群山、月相、两排行星
-    base = 430
-    mx = max(hours) or 1
-    sw = W / 24
-    ridge = _range([((h + .5) * sw, 14 + 86 * (n / mx) ** .85, sw * 2.4) for h, n in enumerate(hours)],
-                   base, 10, 17, curve=1.08)
-    rb = random.Random(23)
-    far = _range([(x, rb.uniform(40, 88), rb.uniform(50, 110)) for x in range(-20, W + 60, 55)], base - 8, 32, 31, rough=.6)
-    mid = _range([(x, rb.uniform(24, 58), rb.uniform(40, 80)) for x in range(-10, W + 40, 38)], base, 20, 37, rough=.8)
-    haze = c.lin([(0, '#3a4660', 0), (1, '#3a4660', .5)], x2=0, y2=1)
-    rimg = c.lin([(0, '#c9d6ea', .3), (.45, '#ffd9a0', .5), (1, '#c9d6ea', .25)])
+    # 海报帧：银河、群山、月相、两排行星；出现后进入无限循环的环境动画
+    live = 29.4
     dawn = c.rad([(0, colors[1], .55), (1, colors[1], 0)])
     rare_x = {'Night': 3, 'Morning': 9, 'Daytime': 15, 'Evening': 21}[rare] * sw
-    px = (peak_h + .5) * sw
-    py = min(y for x, y in ridge if abs(x - px) < 2)
     moons = []
     dmx = max(days) or 1
     for d in range(7):
         r = 5.5 + 5 * days[d] / dmx
         strong = d == busiest and total
         moons.append(f'<g transform="translate({548 + d * 40} {_n(92 - 34 * math.sin(math.pi * d / 6))})">'
-                     f'{c.moon(r, .25 + .75 * days[d] / dmx)}'
+                     f'{c.moon(r, .25 + .75 * days[d] / dmx, breathe_at=live + d * .9)}'
                      f'<text y="{_n(r + 14)}" font-family="{EN}" font-size="7.5" text-anchor="middle" letter-spacing="1.5" '
                      f'fill="{INK if strong else MUTED}">{WEEKDAYS[d].upper()}</text>'
                      f'<text y="{_n(r + 26)}" font-family="{EN}" font-size="10" text-anchor="middle" '
@@ -690,15 +713,19 @@ def render_film(weekly: dict, weekly_days: int, yearly: dict, yearly_days: int, 
     ticks = ''.join(f'<text x="{_n(h * sw)}" y="442" font-family="{EN}" font-size="8.5" text-anchor="middle" fill="{MUTED}">'
                     f'{h:02d}</text>' for h in (6, 12, 18))
     divider = c.lin([(0, '#c9d2e0', 0), (.5, '#c9d2e0', .25), (1, '#c9d2e0', 0)], x2=0, y2=1)
-    section = (f'font-family="{EN}" font-size="9" text-anchor="middle" letter-spacing="3" fill="{MUTED}"')
-    poster = (f'<use href="#{sky}"/>' + c.stars(36, (0, 0, W, 300), .7)
+    section = f'font-family="{EN}" font-size="9" text-anchor="middle" letter-spacing="3" fill="{MUTED}"'
+    # 星空极缓慢地漂移、旋转（群山不动，形成视差）；流星偶尔划过；山顶的金光呼吸
+    sky_live = (f'<g transform="translate({W / 2} {H / 2})"><g style="animation:§drift 46s ease-in-out {live}s infinite alternate">'
+                f'<g transform="translate({-W / 2} {-H / 2})"><use href="#{sky}" transform="translate({W / 2} {H / 2}) scale(1.05) '
+                f'translate({-W / 2} {-H / 2})"/></g></g></g>')
+    tail = c.lin([(0, '#ffffff', 0), (1, '#ffffff', .85)])
+    meteors = ''.join(f'<g transform="translate({x} {y}) rotate({a})"><g opacity="0" style="animation:§met {p}s linear {d}s infinite">'
+                      f'<rect x="-100" y="-.6" width="100" height="1.2" rx=".6" fill="url(#{tail})"/></g></g>'
+                      for x, y, a, d, p in ((520, -10, 152, live + 3.5, 11), (300, -10, 147, live + 9.5, 17), (760, 20, 158, live + 15, 23)))
+    peak_glow = f'<g style="animation:§breathe 4.2s ease-in-out {live}s infinite">{c.light(px, py - 9, h=12, flare=.5)}</g>'
+    poster = (sky_live + c.stars(42, (0, 0, W, 300), .75, twinkle_at=live) + meteors
               + f'<ellipse cx="{_n(rare_x)}" cy="{base - 34}" rx="210" ry="80" fill="url(#{dawn})" opacity=".5"/>'
-              f'<path d="{_poly(far)}L{W + 6} {H}L-6 {H}Z" fill="#0d1320"/>'
-              f'<rect y="300" width="{W}" height="140" fill="url(#{haze})" opacity=".28"/>'
-              f'<path d="{_poly(mid)}L{W + 6} {H}L-6 {H}Z" fill="#070a11"/>'
-              f'<path d="{_poly(ridge)}L{W + 6} {H}L-6 {H}Z" fill="#020305"/>'
-              f'<path d="{_poly(ridge)}" fill="none" stroke="url(#{rimg})" stroke-width=".8"/>'
-              + c.light(px, py - 9, h=12, flare=.5) + ''.join(moons) + periods + ticks
+              + mountains_base + peak_glow + ''.join(moons) + periods + ticks
               + f'<text x="41" y="94" font-family="{EN}" font-size="10" letter-spacing="4.2" fill="{SILVER}">I RARELY SEE {title_en.upper()}</text>'
               f'<text x="40" y="122" font-family="{EN}" font-size="15" fill="{INK}">I&#x27;m {PROFILE[top]}.</text>'
               f'<text x="40" y="142" font-family="{EN}" font-size="12.5" fill="{SILVER}">{total:,} commits in {profile_days} days · '
@@ -706,8 +733,9 @@ def render_film(weekly: dict, weekly_days: int, yearly: dict, yearly_days: int, 
               f'<rect x="414.5" y="176" width="1" height="120" fill="url(#{divider})"/>'
               f'<text x="207.5" y="186" {section}>THIS WEEK · {wtotal:,} LINES</text>'
               f'<text x="622.5" y="186" {section}>THIS YEAR · {n_langs} LANGUAGE{"" if n_langs == 1 else "S"} · {ytotal:,} LINES</text>'
-              + _lineup(c, wrows, wtotal, 207.5, 228, 72, 46) + _lineup(c, yrows, ytotal, 622.5, 228, 72, 46))
-    final = f'<g style="animation:§in 1.4s ease-out 29.8s both">{poster}</g>'
+              + _lineup(c, wrows, wtotal, 207.5, 228, 72, 46, spin_at=live) + _lineup(c, yrows, ytotal, 622.5, 228, 72, 46, spin_at=live))
+    # 海报出现前整组 visibility:hidden，不参与开场镜头的绘制
+    final = f'<g style="animation:§show 1.4s ease-out {live}s both">{poster}</g>'
 
     band = c.nid('c')
     c.defs.append(f'<clipPath id="{band}"><rect width="{W}" height="{BAND_H}"/></clipPath>')
