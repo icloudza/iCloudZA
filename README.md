@@ -3,8 +3,5 @@
 # Hi there 👋
 
 <p align="left">
-  <img src="assets/film-languages.svg" width="830" alt="Seven Days, One Year — the languages I wrote this week and this year">
-</p>
-<p align="left">
-  <img src="assets/film-activity.svg" width="830" alt="I Rarely See the Morning — when I commit, by hour and by weekday">
+  <img src="assets/profile-film.svg" width="830" alt="I Rarely See the Morning — a short film about when I commit and the languages I wrote this week and this year">
 </p>

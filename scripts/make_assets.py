@@ -7,12 +7,9 @@
 
 改了 cinema_svg.py 里的中文字幕或片名后要重跑 fonts，否则新出现的汉字会回退到系统字体。
 
-- sky_a.webp   深空：银河带横在画面下方（语言短片背景）
-- sky_b.webp   夜空：从地平线升起的银河（作息短片背景）
-- galaxy.webp  正面螺旋星系贴图，带透明度；在 SVG 里压扁再旋转，成为倾斜的 3D 星系盘
+- sky.webp     16:9 夜空：银河从群山背后斜向右上升起，穿过两排行星之间（海报背景，开场镜头也截取它的上半部分）
 - planet.webp  气态行星条带纹理，水平可平铺；在 SVG 里滑动模拟自转
-- grain.png    胶片颗粒平铺图
-- fonts/       Cormorant Garamond、Noto Serif SC（两支片各一份）、Noto Serif KR、EB Garamond、Zhi Mang Xing 的子集，
+- fonts/       Cormorant Garamond、Noto Serif SC、Noto Serif KR、EB Garamond、Zhi Mang Xing 的子集，
                授权见 fonts/OFL.txt（SIL OFL 1.1）
 """
 
@@ -129,42 +126,15 @@ def save(img, name, q, alpha=None):
     print(f'{name}.webp', os.path.getsize(f'{OUT}/{name}.webp'), 'bytes')
 
 
-def sky_a():
-    h, w = 347, 830
-    img = milky_way(h, w, w * .5, h * .93, -8, w * .02, h * .14, w * .2, 10, 38000)
-    img += (.008 + .004 * np.clip(fbm(h, w, 3.0, 20), -1, 2))[..., None] * np.array([.35, .45, .85])
-    save(finish(img), 'sky_a', 74)
-
-
-def sky_b():
-    h, w = 347, 830
+def sky():
+    """16:9 夜空：银河从地平线（群山背后）斜向右上升起，越往上越淡；地平线附近一层气辉"""
+    h, w = 467, 830
     t = np.mgrid[0:h, 0:w][0] / h
-    img = milky_way(h, w, w * .53, h * 1.02, -71, -h * .02, h * .1, h * .5, 30, 32000)
-    img *= (.3 + .7 * smoothstep(-.1, .9, t))[..., None]
-    sky = np.stack([.006 + .03 * t ** 3.4, .009 + .045 * t ** 3.4, .02 + .075 * t ** 3.4], -1)
-    glow = np.exp(-((1 - t) / .14) ** 2)[..., None] * np.array([.07, .065, .085])
-    save(finish(img + sky + glow), 'sky_b', 74)
-
-
-def galaxy():
-    n = 256
-    yy, xx = (np.mgrid[0:n, 0:n] - n / 2 + .5) / (n / 2)
-    r = np.hypot(xx, yy)
-    phase = 2 * (np.arctan2(yy, xx) - np.log(r + 1e-3) / np.tan(np.deg2rad(15)))   # 两条对数螺线旋臂
-    n1, n2 = fbm(n, n, 2.2, 41), fbm(n, n, 1.4, 42)
-    arm = (.5 + .5 * np.cos(phase + .35 * n1)) ** 3
-    disk = np.exp(-r / .27)
-    bulge = np.exp(-(r / .085) ** 2)
-    dust = (.5 + .5 * np.cos(phase - .95 + .3 * n1)) ** 7 * smoothstep(.08, .2, r) * np.clip(.65 + .45 * n2, 0, 1)
-    L = disk * (.38 + 1.0 * arm * (.72 + .28 * n2)) * (1 - .75 * dust) + bulge * 1.8
-    warm = np.clip(bulge * 2 + np.exp(-(r / .22) ** 2) * .6, 0, 1)[..., None]
-    img = L[..., None] * (warm * np.array([1.0, .82, .6]) + (1 - warm) * np.array([.7, .8, 1.0]))
-    hii = np.clip(fbm(n, n, 1.2, 43) - 2.0, 0, None) * arm * smoothstep(.9, .3, r) * .9
-    img += hii[..., None] * np.array([.95, .4, .6])
-    img += gblur(stars(n, n, 2600, 44, arm * disk + .02, power=3), .6)[..., None] * .9 * np.array([.8, .88, 1.0])
-    img = tone(img, 2.2)
-    alpha = np.clip(img.max(-1) * 1.6, 0, 1) * smoothstep(1.0, .72, r)
-    save(img / np.maximum(img.max(-1, keepdims=True), 1e-3), 'galaxy', 70, alpha)
+    img = milky_way(h, w, w * .5, h * .49, -70, -h * .44, h * .085, h * .36, 30, 30000)
+    img *= (.28 + .72 * smoothstep(-.05, .95, t))[..., None]
+    base = np.stack([.005 + .028 * t ** 3.4, .008 + .042 * t ** 3.4, .018 + .07 * t ** 3.4], -1)
+    glow = np.exp(-((1 - t) / .12) ** 2)[..., None] * np.array([.07, .065, .085])
+    save(finish(img + base + glow), 'sky', 74)
 
 
 def planet():
@@ -179,19 +149,6 @@ def planet():
         dx = (xx - cx + w / 2) % w - w / 2
         L += s * np.exp(-(dx / rx) ** 2 - ((yy - cy) / ry) ** 2)
     save(np.repeat(np.clip(L, 0, 1)[..., None], 3, -1), 'planet', 72)
-
-
-def grain():
-    """胶片颗粒：5 色调色板 PNG（透明 / 两档亮点 / 两档暗点），体积很小"""
-    n = 120
-    g = np.random.default_rng(61).standard_normal((n, n))
-    idx = np.zeros((n, n), np.uint8)
-    idx[g > .9], idx[g > 1.7], idx[g < -.9], idx[g < -1.7] = 1, 2, 3, 4
-    im = Image.fromarray(idx, 'P')
-    im.putpalette([0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0] + [0] * (256 * 3 - 15))
-    im.info['transparency'] = bytes([0, 40, 90, 50, 110] + [0] * 251)
-    im.save(f'{OUT}/grain.png', optimize=True)
-    print('grain.png', os.path.getsize(f'{OUT}/grain.png'), 'bytes')
 
 
 def _fetch(url: str) -> bytes:
@@ -211,13 +168,12 @@ def fonts():
     from fontTools.ttLib import TTFont
     from fontTools.varLib import instancer
     sys.path.insert(0, HERE)
-    from cinema_svg import FONT_FILES, NS_FILES, brush_chars, word_chars, zh_chars
+    from cinema_svg import FONT_FILES, brush_chars, word_chars, zh_chars
 
     ascii_ = ''.join(chr(c) for c in range(0x20, 0x7f))
     jobs = [   # (Google Fonts 家族, 字重, 需要的字, 输出文件, google/fonts 仓库里的 OFL 目录)
         ('Cormorant Garamond', 500, ascii_ + '·–—‘’“”…\u00a0\u2002\u2003' + word_chars('latin'), FONT_FILES['CG'], 'cormorantgaramond'),
-        ('Noto Serif SC', 500, zh_chars('L'), NS_FILES['L'], 'notoserifsc'),
-        ('Noto Serif SC', 500, zh_chars('A'), NS_FILES['A'], None),
+        ('Noto Serif SC', 500, zh_chars(), FONT_FILES['NS'], 'notoserifsc'),
         ('Noto Serif KR', 500, word_chars('hangul'), FONT_FILES['KR'], 'notoserifkr'),
         ('EB Garamond', 500, word_chars('greek'), FONT_FILES['GR'], 'ebgaramond'),
         ('Zhi Mang Xing', 400, brush_chars(), FONT_FILES['ZM'], 'zhimangxing'),
@@ -245,7 +201,7 @@ if __name__ == '__main__':
     what = set(sys.argv[1:]) or {'images', 'fonts'}
     os.makedirs(OUT, exist_ok=True)
     if 'images' in what:
-        for step in (sky_a, sky_b, galaxy, planet, grain):
+        for step in (sky, planet):
             step()
     if 'fonts' in what:
         fonts()

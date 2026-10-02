@@ -6,7 +6,7 @@ GitHub 语言统计分析脚本
   2. 作息画像（PROFILE_DAYS，默认 365 天）：按提交时的本地时区统计提交时段
   3. 主要语言（PROFILE_DAYS，默认 365 天）：按语言汇总本人代码行数
 三块共用同一份 PROFILE_DAYS 窗口的浅克隆，不额外调用 commit API。
-结果渲染为两支电影短片式的动画 SVG（见 cinema_svg.py），写入 OUTPUT_DIR（默认 assets/）
+结果渲染为一支约 30 秒的电影短片式动画 SVG（见 cinema_svg.py），写入 OUTPUT_DIR（默认 assets/）
 """
 
 import os
@@ -19,7 +19,7 @@ from collections import defaultdict
 
 from datetime import datetime
 
-from cinema_svg import render_languages_film, render_activity_film
+from cinema_svg import render_film
 
 # 文件扩展名到语言的映射
 # 只统计主流编程语言和前端语言；数据/配置/文档/构建脚本类文件
@@ -494,19 +494,13 @@ def main():
     print(f"\nCommits by hour: {hours_hist}")
     print(f"Commits by weekday: {[sum(row) for row in time_matrix]}")
 
-    # === 渲染两支短片（画面本身是暗色的，浅色 / 深色模式共用同一份） ===
-    films = {
-        'film-languages': render_languages_film(weekly_stats, since_days, yearly_stats, profile_days),
-        'film-activity': render_activity_film(time_matrix, profile_days),
-    }
-
+    # === 渲染成一支短片（画面本身是暗色的，浅色 / 深色模式共用同一份） ===
+    svg = render_film(weekly_stats, since_days, yearly_stats, profile_days, time_matrix, profile_days)
     os.makedirs(output_dir, exist_ok=True)
-    print()
-    for name, svg in films.items():
-        path = os.path.join(output_dir, f"{name}.svg")
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write(svg)
-        print(f"[OK] {path} ({len(svg) // 1024} KB)")
+    path = os.path.join(output_dir, 'profile-film.svg')
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(svg)
+    print(f"\n[OK] {path} ({len(svg) // 1024} KB)")
 
 
 if __name__ == '__main__':
