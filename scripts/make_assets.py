@@ -12,13 +12,15 @@
 - galaxy.webp  正面螺旋星系贴图，带透明度；在 SVG 里压扁再旋转，成为倾斜的 3D 星系盘
 - planet.webp  气态行星条带纹理，水平可平铺；在 SVG 里滑动模拟自转
 - grain.png    胶片颗粒平铺图
-- fonts/       Cormorant Garamond、Noto Serif SC、Zhi Mang Xing 的子集，授权见 fonts/OFL.txt（SIL OFL 1.1）
+- fonts/       Cormorant Garamond、Noto Serif SC（两支片各一份）、Noto Serif KR、EB Garamond、Zhi Mang Xing 的子集，
+               授权见 fonts/OFL.txt（SIL OFL 1.1）
 """
 
 import io
 import os
 import re
 import sys
+import time
 import urllib.parse
 import urllib.request
 
@@ -193,9 +195,15 @@ def grain():
 
 
 def _fetch(url: str) -> bytes:
-    # Google Fonts 按 User-Agent 决定返回格式，带上现代浏览器的 UA 才会给 WOFF2
+    # Google Fonts 按 User-Agent 决定返回格式，带上现代浏览器的 UA 才会给 WOFF2；网络偶尔抖动，重试几次
     ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
-    return urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': ua}), timeout=30).read()
+    for attempt in range(5):
+        try:
+            return urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': ua}), timeout=30).read()
+        except OSError:
+            if attempt == 4:
+                raise
+            time.sleep(2 * (attempt + 1))
 
 
 def fonts():
@@ -203,28 +211,32 @@ def fonts():
     from fontTools.ttLib import TTFont
     from fontTools.varLib import instancer
     sys.path.insert(0, HERE)
-    from cinema_svg import FONT_FILES, brush_chars, zh_chars
+    from cinema_svg import FONT_FILES, NS_FILES, brush_chars, word_chars, zh_chars
 
-    latin = ''.join(chr(c) for c in range(0x20, 0x7f)) + '·–—‘’“”…'
-    jobs = [   # (Google Fonts 家族, 需要的字, {字重: 文件}, google/fonts 仓库里的 OFL 目录)
-        ('Cormorant Garamond', latin, {500: FONT_FILES['CG'], 600: FONT_FILES['CG6']}, 'cormorantgaramond'),
-        ('Noto Serif SC', zh_chars(), {500: FONT_FILES['NS']}, 'notoserifsc'),
-        ('Zhi Mang Xing', brush_chars(), {400: FONT_FILES['ZM']}, 'zhimangxing'),
+    ascii_ = ''.join(chr(c) for c in range(0x20, 0x7f))
+    jobs = [   # (Google Fonts 家族, 字重, 需要的字, 输出文件, google/fonts 仓库里的 OFL 目录)
+        ('Cormorant Garamond', 500, ascii_ + '·–—‘’“”…\u00a0\u2002\u2003' + word_chars('latin'), FONT_FILES['CG'], 'cormorantgaramond'),
+        ('Noto Serif SC', 500, zh_chars('L'), NS_FILES['L'], 'notoserifsc'),
+        ('Noto Serif SC', 500, zh_chars('A'), NS_FILES['A'], None),
+        ('Noto Serif KR', 500, word_chars('hangul'), FONT_FILES['KR'], 'notoserifkr'),
+        ('EB Garamond', 500, word_chars('greek'), FONT_FILES['GR'], 'ebgaramond'),
+        ('Zhi Mang Xing', 400, brush_chars(), FONT_FILES['ZM'], 'zhimangxing'),
     ]
     os.makedirs(f'{OUT}/fonts', exist_ok=True)
     licenses = []
-    for family, text, outputs, ofl in jobs:
-        for weight, fn in outputs.items():
-            css = _fetch(f"https://fonts.googleapis.com/css2?family={family.replace(' ', '+')}:wght@{weight}"
-                         f"&text={urllib.parse.quote(text)}").decode()
-            font = TTFont(io.BytesIO(_fetch(re.search(r'url\(([^)]+)\)', css).group(1))))
-            if 'fvar' in font:
-                font = instancer.instantiateVariableFont(font, {'wght': weight})
-            font.flavor = 'woff2'
-            font.save(f'{OUT}/fonts/{fn}')
-            print(f'fonts/{fn}', os.path.getsize(f'{OUT}/fonts/{fn}'), 'bytes')
-        licenses.append(f'===== {family} =====\n\n'
-                        + _fetch(f'https://raw.githubusercontent.com/google/fonts/main/ofl/{ofl}/OFL.txt').decode().strip())
+    for family, weight, text, fn, ofl in jobs:
+        css = _fetch(f"https://fonts.googleapis.com/css2?family={family.replace(' ', '+')}:wght@{weight}"
+                     f"&text={urllib.parse.quote(text)}").decode()
+        font = TTFont(io.BytesIO(_fetch(re.search(r'url\(([^)]+)\)', css).group(1))))
+        if 'fvar' in font:
+            font = instancer.instantiateVariableFont(font, {'wght': weight})
+        font.flavor = 'woff2'
+        font.save(f'{OUT}/fonts/{fn}')
+        missing = [ch for ch in text if ord(ch) not in font.getBestCmap() and not ch.isspace()]
+        print(f'fonts/{fn}', os.path.getsize(f'{OUT}/fonts/{fn}'), 'bytes', 'missing:', ''.join(missing) or '-')
+        if ofl:
+            licenses.append(f'===== {family} =====\n\n'
+                            + _fetch(f'https://raw.githubusercontent.com/google/fonts/main/ofl/{ofl}/OFL.txt').decode().strip())
     with open(f'{OUT}/fonts/OFL.txt', 'w', encoding='utf-8') as f:
         f.write('\n\n\n'.join(licenses) + '\n')
 
