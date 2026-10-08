@@ -3,5 +3,14 @@
 # Hi there 👋
 
 <p align="left">
-  <img src="assets/profile-film.svg" width="830" alt="The Five Elements — a short ink-wash film: this year's top five languages as wood, fire, earth, metal and water, with yearly and weekly line counts">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/languages-dark.svg">
+    <img src="assets/languages-light.svg" width="830" alt="Languages I wrote this week and over the last year, by lines changed">
+  </picture>
+</p>
+<p align="left">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/coding-activity-dark.svg">
+    <img src="assets/coding-activity-light.svg" width="830" alt="When I commit: commits by hour of day and by weekday over the last year">
+  </picture>
 </p>

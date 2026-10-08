@@ -17,12 +17,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
-          python-version: '3.11'
+          python-version: '3.14'
 
       - name: Run Language Stats Analysis
         env:
@@ -31,7 +31,7 @@ jobs:
           AUTHOR_EMAILS: icloudza,icloudza@users.noreply.github.com,cloudza
           OUTPUT_DIR: assets
           SINCE_DAYS: '7'      # 本周语言统计窗口
-          PROFILE_DAYS: '365'  # 年度语言统计 / 提交次数窗口
+          PROFILE_DAYS: '365'  # 作息画像 / 主要语言窗口
         run: python scripts/language_stats.py
 
       - name: Commit and Push

@@ -3,10 +3,10 @@
 GitHub 语言统计分析脚本
 扫描用户所有仓库（包括私有）的提交历史，只统计指定作者本人的提交，生成三块统计：
   1. 本周语言统计（SINCE_DAYS，默认 7 天）：按语言汇总代码行数变化
-  2. 年度语言统计（PROFILE_DAYS，默认 365 天）：按语言汇总本人代码行数
-  3. 提交次数（PROFILE_DAYS，默认 365 天）：本人的提交数（不含合并提交）
+  2. 作息画像（PROFILE_DAYS，默认 365 天）：按提交时的本地时区统计提交时段
+  3. 主要语言（PROFILE_DAYS，默认 365 天）：按语言汇总本人代码行数
 三块共用同一份 PROFILE_DAYS 窗口的浅克隆，不额外调用 commit API。
-结果渲染为一支约 25 秒的水墨动画 SVG《五行》（见 wuxing_svg.py），写入 OUTPUT_DIR（默认 assets/）
+结果渲染为带加载动画的 SVG 卡片（见 stats_svg.py），写入 OUTPUT_DIR（默认 assets/）
 """
 
 import os
@@ -17,7 +17,9 @@ import tempfile
 import shutil
 from collections import defaultdict
 
-from wuxing_svg import render_film
+from datetime import datetime
+
+from stats_svg import render_languages_row, render_commit_card
 
 # 文件扩展名到语言的映射
 # 只统计主流编程语言和前端语言；数据/配置/文档/构建脚本类文件
@@ -110,46 +112,12 @@ def get_language(filepath: str) -> str | None:
     return EXTENSION_MAP.get(ext)
 
 
-def format_number(n: int) -> str:
-    """格式化数字，保持高精度"""
-    if abs(n) >= 1000000:
-        return f"{n/1000000:.2f}m"
-    elif abs(n) >= 100000:
-        return f"{n/1000:.1f}k"
-    elif abs(n) >= 10000:
-        return f"{n/1000:.2f}k"
-    elif abs(n) >= 1000:
-        return f"{n/1000:.2f}k"
-    else:
-        return str(n)
-
-
-def generate_bar(percentage: float, width: int = 21) -> str:
-    """生成进度条，使用更精细的字符"""
-    # Unicode 块字符：█ ▉ ▊ ▋ ▌ ▍ ▎ ▏
-    blocks = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉', '█']
-
-    filled_float = percentage / 100 * width
-    filled_full = int(filled_float)
-    remainder = filled_float - filled_full
-
-    bar = '█' * filled_full
-
-    # 添加部分填充字符
-    if filled_full < width:
-        partial_index = int(remainder * 8)
-        if partial_index > 0:
-            bar += blocks[partial_index]
-            filled_full += 1
-
-    # 填充剩余空白
-    bar += '░' * (width - len(bar))
-
-    return bar[:width]
-
-
 def get_all_repos(username: str, token: str) -> list:
-    """获取用户的所有仓库（包括私有仓库）"""
+    """获取用户的所有仓库（包括私有仓库）
+
+    API 出错（Token 过期、限流等）时直接退出：拿着不完整的仓库列表继续跑，
+    会把偏小甚至为空的统计写进卡片并提交上去。
+    """
     repos = []
     page = 1
     per_page = 100
@@ -168,12 +136,13 @@ def get_all_repos(username: str, token: str) -> list:
         try:
             data = json.loads(result.stdout)
         except json.JSONDecodeError:
-            print(f"[WARN] API response parse failed: {result.stdout[:200]}", file=sys.stderr)
-            break
+            print(f"[ERROR] API response parse failed: {result.stdout[:200]}", file=sys.stderr)
+            sys.exit(1)
 
-        if not data or isinstance(data, dict):
-            if isinstance(data, dict) and 'message' in data:
-                print(f"[WARN] API error: {data['message']}", file=sys.stderr)
+        if isinstance(data, dict):
+            print(f"[ERROR] API error: {data.get('message', data)}", file=sys.stderr)
+            sys.exit(1)
+        if not data:
             break
 
         for repo in data:
@@ -354,25 +323,40 @@ def clone_repo(repo: dict, target_path: str, token: str, since_days: int = 7) ->
         return CLONE_FAILED
 
 
-def count_commits(repo_path: str, author_emails: list[str], since_days: int) -> int:
-    """本地克隆中指定作者最近 N 天的提交数；合并提交不是写代码，排除"""
+def get_commit_times(repo_path: str, author_emails: list[str], since_days: int) -> list[tuple[int, int]]:
+    """从本地克隆中读取指定作者最近 N 天的提交时间，返回 (weekday, hour) 列表
+
+    git 的 %aI 会输出带时区偏移的 ISO 时间，例如 2026-09-04T23:12:01+08:00，
+    直接按字面解析即为作者当时所在时区的本地时间，不需要假设固定时区。
+    合并提交的时间是点按钮的时间而非写代码的时间，所以排除。
+    weekday 以周一为 0。
+    """
     cmd = [
-        'git', '-C', repo_path, 'rev-list', '--count',
+        'git', '-C', repo_path, 'log',
         f'--since={since_days} days ago',
         '--no-merges',
+        '--format=%aI',
     ]
     for email in author_emails:
         cmd.append(f'--author={email}')
-    cmd.append('HEAD')
 
+    times = []
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        return int(result.stdout.strip() or 0)
+        for line in result.stdout.split('\n'):
+            line = line.strip()
+            if len(line) < 19:
+                continue
+            try:
+                dt = datetime.fromisoformat(line)
+                times.append((dt.weekday(), dt.hour))
+            except ValueError:
+                continue
     except subprocess.TimeoutExpired:
-        print("    [WARN] Commit count timeout", file=sys.stderr)
+        print("    [WARN] Commit time analysis timeout", file=sys.stderr)
     except Exception as e:
-        print(f"    [WARN] Commit count error: {e}", file=sys.stderr)
-    return 0
+        print(f"    [WARN] Commit time analysis error: {e}", file=sys.stderr)
+    return times
 
 
 def merge_stats(total: dict, part: dict) -> None:
@@ -405,7 +389,7 @@ def main():
     token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
     output_dir = os.environ.get('OUTPUT_DIR', 'assets')
     since_days = int(os.environ.get('SINCE_DAYS', '7'))        # 本周统计窗口
-    profile_days = int(os.environ.get('PROFILE_DAYS', '365'))  # 年度语言统计 / 提交次数窗口
+    profile_days = int(os.environ.get('PROFILE_DAYS', '365'))  # 作息画像 / 主要语言窗口
 
     if not token:
         print("[ERROR] GH_TOKEN environment variable is required", file=sys.stderr)
@@ -433,10 +417,11 @@ def main():
     public_count = len(repos) - private_count
     print(f"   Public: {public_count}  Private: {private_count}")
 
-    # 汇总统计：本周 / 年度语言，年度提交次数
+    # 汇总统计：本周 / 年度 / 提交时间矩阵 [weekday][hour]
     weekly_stats = defaultdict(lambda: {'added': 0, 'deleted': 0})
     yearly_stats = defaultdict(lambda: {'added': 0, 'deleted': 0})
-    commits = 0
+    time_matrix = [[0] * 24 for _ in range(7)]
+    clone_failed = 0
 
     # 一份 profile_days 窗口的浅克隆同时服务三块统计
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -450,37 +435,55 @@ def main():
             if clone_status == CLONE_OK:
                 week = analyze_repo(repo_path, author_emails, since_days)
                 year = analyze_repo(repo_path, author_emails, profile_days)
-                n_commits = count_commits(repo_path, author_emails, profile_days)
+                times = get_commit_times(repo_path, author_emails, profile_days)
 
                 merge_stats(weekly_stats, week)
                 merge_stats(yearly_stats, year)
-                commits += n_commits
+                for weekday, hour in times:
+                    time_matrix[weekday][hour] += 1
 
                 week_total = total_lines(week)
                 if week_total:
                     print(f"    [OK] week: {week_total:,} lines (main: {sort_stats(week)[0][0]})")
                 else:
                     print(f"    [--] No commits this week")
-                print(f"    [..] year: {total_lines(year):,} lines, {n_commits} commits")
+                print(f"    [..] year: {total_lines(year):,} lines, {len(times)} commits")
 
                 shutil.rmtree(repo_path, ignore_errors=True)
             elif clone_status == CLONE_NO_COMMITS:
                 print(f"    [--] No commits in the last {profile_days} days")
             else:
+                clone_failed += 1
                 print(f"    [WARN] Clone failed, skipping")
+
+    # 一个仓库都没拿到时多半是 Token 或网络出了问题，退出并保留上一次的卡片，不发布空卡片
+    if not repos or clone_failed == len(repos):
+        print(f"\n[ERROR] No repository could be analyzed ({clone_failed}/{len(repos)} clones failed), "
+              "keeping the existing cards", file=sys.stderr)
+        sys.exit(1)
 
     # === 日志汇总 ===
     print_summary(f"This week ({since_days} days)", weekly_stats)
     print_summary(f"Profile window ({profile_days} days)", yearly_stats)
-    print(f"\nCommits ({profile_days} days): {commits:,}")
+    hours_hist = [sum(time_matrix[d][h] for d in range(7)) for h in range(24)]
+    print(f"\nCommits by hour: {hours_hist}")
+    print(f"Commits by weekday: {[sum(row) for row in time_matrix]}")
 
-    # === 渲染成一支短片（画面自带底色，浅色 / 深色模式共用同一份） ===
-    svg = render_film(weekly_stats, since_days, yearly_stats, profile_days, commits)
+    # === 渲染 SVG 卡片（浅色 / 深色各一份，README 用 <picture> 按主题切换） ===
+    cards = {
+        'languages': lambda theme: render_languages_row(
+            weekly_stats, since_days, yearly_stats, profile_days, theme=theme),
+        'coding-activity': lambda theme: render_commit_card(time_matrix, profile_days, theme=theme),
+    }
+
     os.makedirs(output_dir, exist_ok=True)
-    path = os.path.join(output_dir, 'profile-film.svg')
-    with open(path, 'w', encoding='utf-8') as f:
-        f.write(svg)
-    print(f"\n[OK] {path} ({len(svg) // 1024} KB)")
+    print()
+    for name, render in cards.items():
+        for theme in ('light', 'dark'):
+            path = os.path.join(output_dir, f"{name}-{theme}.svg")
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(render(theme))
+            print(f"[OK] {path}")
 
 
 if __name__ == '__main__':
